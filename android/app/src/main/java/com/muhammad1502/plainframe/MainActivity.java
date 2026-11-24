@@ -18,6 +18,7 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
 import android.window.OnBackInvokedDispatcher;
 
 import androidx.core.content.IntentCompat;
@@ -35,6 +36,7 @@ public class MainActivity extends Activity {
     private static final int PICK = 41;
 
     WebView web;
+    FrameLayout root;
     final List<Uri> shared = new ArrayList<>();
     private ValueCallback<Uri[]> pending;
 
@@ -44,7 +46,11 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         web = new WebView(this);
         web.setBackgroundColor(Color.parseColor("#190207"));
-        setContentView(web);
+        // WebView ignores its own padding, so the insets go on a plain container around it.
+        root = new FrameLayout(this);
+        root.setBackgroundColor(Color.parseColor("#190207"));
+        root.addView(web, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        setContentView(root);
         applyInsets();
 
         WebSettings s = web.getSettings();
@@ -106,7 +112,7 @@ public class MainActivity extends Activity {
 
     private void applyInsets() {
         getWindow().setDecorFitsSystemWindows(false);
-        web.setOnApplyWindowInsetsListener((v, insets) -> {
+        root.setOnApplyWindowInsetsListener((v, insets) -> {
             android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
             v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
             return WindowInsets.CONSUMED;
@@ -117,6 +123,7 @@ public class MainActivity extends Activity {
         runOnUiThread(() -> {
             int bg = Color.parseColor(dark ? "#190207" : "#fff6f8");
             getWindow().getDecorView().setBackgroundColor(bg);
+            root.setBackgroundColor(bg);
             web.setBackgroundColor(bg);
             WindowInsetsController c = getWindow().getInsetsController();
             if (c != null) {

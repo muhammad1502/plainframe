@@ -4,7 +4,7 @@ Removes metadata from photos on your own device: location, camera and lens detai
 
 ## Install on Android
 
-1. On your phone, download [`release/Plainframe-1.0.apk`](release/Plainframe-1.0.apk) (open it on GitHub and tap the download button).
+1. On your phone, download [`release/Plainframe-1.1.apk`](release/Plainframe-1.1.apk) (open it on GitHub and tap the download button).
 2. Open the file. Android asks you to allow installs from your browser or file manager the first time; allow it, then tap Install.
 3. Open Plainframe from your app drawer. You can also share photos to it from Gallery or Google Photos with Share, then Plainframe.
 
