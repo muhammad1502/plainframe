@@ -1,7 +1,7 @@
 {
   "name": "Plainframe",
   "short_name": "Plainframe",
-  "description": "Remove location, camera details, AI prompts and Content Credentials from photos, on your device.",
+  "description": "Remove location, camera details, AI prompts and Content Credentials from photos and videos, on your device.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
@@ -19,6 +19,6 @@
     "action": "./share",
     "method": "POST",
     "enctype": "multipart/form-data",
-    "params": { "files": [{ "name": "photos", "accept": ["image/*", ".jpg", ".jpeg", ".png", ".webp", ".avif", ".heic"] }] }
+    "params": { "files": [{ "name": "photos", "accept": ["image/*", "video/*", ".jpg", ".jpeg", ".png", ".webp", ".avif", ".heic", ".mp4", ".mov"] }] }
   }
 }

@@ -7,8 +7,8 @@ const TABLE = new Uint32Array(256).map((_, n) => {
   return c >>> 0;
 });
 
-function crc32(bytes) {
-  let c = 0xffffffff;
+export function crc32(bytes, prev = 0) {
+  let c = (prev ^ 0xffffffff) >>> 0;
   for (let i = 0; i < bytes.length; i++) c = TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
 }
@@ -22,10 +22,15 @@ export async function makeZip(files) {
   const used = new Set();
   let offset = 0;
 
+  const total = files.reduce((n, f) => n + f.blob.size, 0);
+  if (total > 0xfffffff0) throw new Error('Too large for one ZIP (over 4 GB). Save the files one by one.');
   for (const f of files) {
-    const data = new Uint8Array(await f.blob.arrayBuffer());
+    // Read in slices for the checksum; the archive then references the blob itself, so a long video
+    // never has to sit in memory whole.
+    let crc = 0;
+    for (let at = 0; at < f.blob.size; at += 8 << 20) crc = crc32(new Uint8Array(await f.blob.slice(at, at + (8 << 20)).arrayBuffer()), crc);
+    const data = f.blob;
     const name = enc.encode(uniqueName(f.name, used));
-    const crc = crc32(data);
 
     const local = new DataView(new ArrayBuffer(30));
     local.setUint32(0, 0x04034b50, true);
@@ -35,8 +40,8 @@ export async function makeZip(files) {
     local.setUint16(10, 0, true);
     local.setUint16(12, DOS_DATE, true);
     local.setUint32(14, crc, true);
-    local.setUint32(18, data.length, true);
-    local.setUint32(22, data.length, true);
+    local.setUint32(18, data.size, true);
+    local.setUint32(22, data.size, true);
     local.setUint16(26, name.length, true);
     parts.push(local, name, data);
 
@@ -47,12 +52,12 @@ export async function makeZip(files) {
     cd.setUint16(8, 0x0800, true);
     cd.setUint16(14, DOS_DATE, true);
     cd.setUint32(16, crc, true);
-    cd.setUint32(20, data.length, true);
-    cd.setUint32(24, data.length, true);
+    cd.setUint32(20, data.size, true);
+    cd.setUint32(24, data.size, true);
     cd.setUint16(28, name.length, true);
     cd.setUint32(42, offset, true);
     central.push(cd, name);
-    offset += 30 + name.length + data.length;
+    offset += 30 + name.length + data.size;
   }
 
   const cdSize = central.reduce((n, p) => n + p.byteLength, 0);

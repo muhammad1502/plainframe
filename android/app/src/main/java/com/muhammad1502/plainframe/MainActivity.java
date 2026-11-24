@@ -88,10 +88,11 @@ public class MainActivity extends Activity {
                 pending = callback;
                 Intent i = new Intent(Intent.ACTION_GET_CONTENT);
                 i.addCategory(Intent.CATEGORY_OPENABLE);
-                i.setType("image/*");
+                i.setType("*/*");
+                i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/*", "video/*"});
                 i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
                 try {
-                    startActivityForResult(Intent.createChooser(i, "Choose photos"), PICK);
+                    startActivityForResult(Intent.createChooser(i, "Choose photos or videos"), PICK);
                 } catch (Exception e) {
                     pending = null;
                     return false;

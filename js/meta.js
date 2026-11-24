@@ -4,7 +4,7 @@
 const utf8 = new TextDecoder('utf-8');
 const latin1 = new TextDecoder('latin1');
 
-const AI_WORDS = /(stable[ _-]?diffusion|comfyui|automatic1111|a1111|invokeai|novelai|midjourney|dall[·\-. ]?e|openai|chatgpt|firefly|imagen|gemini|leonardo\.ai|flux\.1|sdxl|ideogram|runway|bing image creator|copilot designer|meta ai|grok|krea)/i;
+export const AI_WORDS = /(stable[ _-]?diffusion|comfyui|automatic1111|a1111|invokeai|novelai|midjourney|dall[·\-. ]?e|openai|chatgpt|firefly|imagen|gemini|leonardo\.ai|flux\.1|sdxl|ideogram|runway|bing image creator|copilot designer|meta ai|grok|krea)/i;
 const AI_SOURCE = /(trainedAlgorithmicMedia|compositeWithTrainedAlgorithmicMedia|algorithmicMedia|compositeSynthetic)/;
 
 export function detectFormat(b) {
@@ -57,7 +57,7 @@ export const formatBytes = (n) =>
 
 // ---- Report builder -------------------------------------------------------
 
-class Report {
+export class Report {
   constructor(format) {
     this.format = format;
     this.groups = new Map();
@@ -83,7 +83,7 @@ class Report {
   }
   finish() {
     if (this.ai.size) this.flags.add('ai');
-    const order = ['ai', 'c2pa', 'gps', 'camera', 'author', 'xmp', 'text', 'comment', 'thumb', 'icc', 'other'];
+    const order = ['ai', 'c2pa', 'gps', 'camera', 'dates', 'author', 'xmp', 'text', 'comment', 'thumb', 'icc', 'other'];
     const groups = [...this.groups.values()]
       .filter((g) => g.items.length || g.bytes)
       .sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
@@ -105,6 +105,7 @@ const GROUP_TITLES = {
   c2pa: 'Content Credentials (C2PA)',
   gps: 'Location',
   camera: 'Camera and device',
+  dates: 'Dates and times',
   author: 'Author and copyright',
   xmp: 'XMP data',
   text: 'Text notes',
@@ -272,14 +273,14 @@ function iccName(p) {
 
 const TAGS0 = {
   0x010e: ['camera', 'Description'], 0x010f: ['camera', 'Make'], 0x0110: ['camera', 'Model'],
-  0x0131: ['camera', 'Software'], 0x0132: ['camera', 'Modified'], 0x013b: ['author', 'Artist'],
+  0x0131: ['camera', 'Software'], 0x0132: ['dates', 'Modified'], 0x013b: ['author', 'Artist'],
   0x013c: ['camera', 'Computer'], 0x8298: ['author', 'Copyright'], 0x9c9b: ['author', 'Title'],
   0x9c9c: ['text', 'Comment'], 0x9c9d: ['author', 'Author'], 0x9c9e: ['author', 'Keywords'], 0x9c9f: ['author', 'Subject'],
 };
 const TAGS_EXIF = {
   0x829a: ['camera', 'Exposure'], 0x829d: ['camera', 'Aperture'], 0x8827: ['camera', 'ISO'],
-  0x9003: ['camera', 'Taken'], 0x9004: ['camera', 'Digitized'], 0x9010: ['camera', 'Time zone'],
-  0x9011: ['camera', 'Time zone'], 0x920a: ['camera', 'Focal length'], 0x927c: ['camera', 'Maker notes'],
+  0x9003: ['dates', 'Taken'], 0x9004: ['dates', 'Digitized'], 0x9010: ['dates', 'Time zone'],
+  0x9011: ['dates', 'Time zone'], 0x920a: ['camera', 'Focal length'], 0x927c: ['camera', 'Maker notes'],
   0x9286: ['text', 'User comment'], 0xa420: ['camera', 'Unique image ID'], 0xa430: ['author', 'Camera owner'],
   0xa431: ['camera', 'Camera serial'], 0xa433: ['camera', 'Lens make'], 0xa434: ['camera', 'Lens'],
   0xa435: ['camera', 'Lens serial'],
@@ -426,7 +427,7 @@ export function readXmp(x, r, bytes = x.length) {
   };
   const fields = [
     ['xmp:CreatorTool', 'camera', 'Made with'], ['tiff:Make', 'camera', 'Make'], ['tiff:Model', 'camera', 'Model'],
-    ['xmp:CreateDate', 'camera', 'Created'], ['photoshop:DateCreated', 'camera', 'Created'],
+    ['xmp:CreateDate', 'dates', 'Created'], ['photoshop:DateCreated', 'dates', 'Created'], ['xmp:ModifyDate', 'dates', 'Modified'], ['exif:DateTimeOriginal', 'dates', 'Taken'],
     ['dc:creator', 'author', 'Creator'], ['dc:rights', 'author', 'Rights'], ['photoshop:Credit', 'author', 'Credit'],
     ['dc:title', 'author', 'Title'], ['dc:description', 'text', 'Description'], ['dc:subject', 'author', 'Keywords'],
     ['photoshop:City', 'gps', 'City'], ['photoshop:Country', 'gps', 'Country'],
@@ -459,7 +460,7 @@ const decodeEntities = (s) =>
 // ---- Photoshop / IPTC -----------------------------------------------------
 
 const IPTC = {
-  5: ['author', 'Title'], 25: ['author', 'Keywords'], 55: ['camera', 'Date created'], 80: ['author', 'By-line'],
+  5: ['author', 'Title'], 25: ['author', 'Keywords'], 55: ['dates', 'Date created'], 80: ['author', 'By-line'],
   85: ['author', 'By-line title'], 90: ['gps', 'City'], 92: ['gps', 'Sublocation'], 95: ['gps', 'State'],
   101: ['gps', 'Country'], 105: ['author', 'Headline'], 110: ['author', 'Credit'], 115: ['author', 'Source'],
   116: ['author', 'Copyright'], 118: ['author', 'Contact'], 120: ['text', 'Caption'], 122: ['author', 'Caption writer'],
@@ -575,7 +576,7 @@ async function inflate(data) {
   }
 }
 
-const AI_KEYS = /^(parameters|prompt|workflow|negative_prompt|sd-metadata|invokeai_metadata|invokeai_graph|dream|generation_data|comfyui|ai_metadata|aesthetic_score|seed)$/i;
+export const AI_KEYS = /^(parameters|prompt|workflow|negative_prompt|sd-metadata|invokeai_metadata|invokeai_graph|dream|generation_data|comfyui|ai_metadata|aesthetic_score|seed)$/i;
 
 async function readPng(b, r) {
   const { chunks, trailer } = pngChunks(b);
@@ -591,7 +592,7 @@ async function readPng(b, r) {
         continue;
       }
       const isAI = AI_KEYS.test(t.key) || (t.key === 'Software' && AI_WORDS.test(t.text)) || (t.key === 'Comment' && /"(prompt|uc|steps|sampler)"/.test(t.text)) || (t.key === 'Description' && /--(v|ar|style|seed) /.test(t.text));
-      r.add(isAI ? 'ai' : 'text', t.key, clip(t.text, isAI ? 600 : 400), size);
+      r.add(isAI ? 'ai' : /^creation time$/i.test(t.key) ? 'dates' : 'text', t.key, clip(t.text, isAI ? 600 : 400), size);
       if (isAI) {
         if (t.key === 'workflow' || t.key === 'prompt' && t.text.startsWith('{')) r.ai.add('ComfyUI');
         else if (t.key === 'parameters') r.ai.add('Stable Diffusion settings');
@@ -603,7 +604,7 @@ async function readPng(b, r) {
     else if (c.type === 'caBX') readC2pa(c.data, r);
     else if (c.type === 'tIME') {
       const d = c.data;
-      r.add('camera', 'Last changed', `${u16be(d, 0)}-${pad(d[2])}-${pad(d[3])} ${pad(d[4])}:${pad(d[5])}`, size);
+      r.add('dates', 'Last changed', `${u16be(d, 0)}-${pad(d[2])}-${pad(d[3])} ${pad(d[4])}:${pad(d[5])}`, size);
     } else if (c.type === 'iCCP') {
       const z = c.data.indexOf(0);
       r.add('icc', 'ICC profile', latin1.decode(c.data.subarray(0, z)) || 'Embedded', size);
@@ -613,7 +614,7 @@ async function readPng(b, r) {
 }
 const pad = (n) => String(n).padStart(2, '0');
 
-async function pngText(c) {
+export async function pngText(c) {
   const d = c.data;
   const z = d.indexOf(0);
   if (z < 0) return null;

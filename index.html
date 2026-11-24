@@ -27,6 +27,8 @@
     <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></symbol>
     <symbol id="i-eraser" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L11 21"/><path d="M22 21H7M5 11l9 9"/></symbol>
     <symbol id="i-save" viewBox="0 0 24 24"><path d="M12 15V3M7 10l5 5 5-5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></symbol>
+    <symbol id="i-video" viewBox="0 0 24 24"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="m22 8-6 4 6 4z"/></symbol>
+    <symbol id="i-zoom" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/></symbol>
     <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></symbol>
     <symbol id="i-zip" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M10 9h1M10 12h1M10 15h1"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></symbol>
@@ -84,21 +86,21 @@
         <rect class="art-sq" x="168" y="112" width="26" height="26" rx="7" transform="rotate(14 181 125)"/>
       </svg>
       <div class="drop-copy">
-        <h2 id="add-title">Add photos</h2>
-        <p>JPG, PNG, HEIC, WebP, AVIF, GIF, TIFF and BMP. As many as you like.</p>
+        <h2 id="add-title">Add photos or videos</h2>
+        <p>JPG, PNG, HEIC, WebP, AVIF, GIF, TIFF, BMP, MP4 and MOV. As many as you like.</p>
       </div>
       <label class="button button-inverse" for="picker">
         <svg aria-hidden="true"><use href="#i-plus"/></svg>
-        <span>Choose photos</span>
+        <span>Choose files</span>
       </label>
-      <input id="picker" class="visually-hidden" type="file" multiple accept="image/*,.jpg,.jpeg,.png,.heic,.heif,.webp,.avif,.gif,.tif,.tiff,.bmp,.ico">
+      <input id="picker" class="visually-hidden" type="file" multiple accept="image/*,video/mp4,video/quicktime,video/3gpp,.jpg,.jpeg,.png,.heic,.heif,.webp,.avif,.gif,.tif,.tiff,.bmp,.ico,.mp4,.m4v,.mov,.3gp">
       <p class="drop-hint" aria-hidden="true">or drop them here</p>
     </div>
   </section>
 
   <section class="viewport-content section" id="photos" aria-labelledby="photos-title" hidden>
     <div class="section-head">
-      <h2 id="photos-title">Your photos</h2>
+      <h2 id="photos-title">Your files</h2>
       <button class="text-button" id="clear" type="button">Clear all</button>
     </div>
     <p class="section-intro" id="summary"></p>
@@ -108,6 +110,27 @@
   <section class="viewport-content section" aria-labelledby="settings-title">
     <h2 id="settings-title">Settings</h2>
     <div class="card list-card settings">
+      <div class="row">
+        <span class="row-icon" aria-hidden="true"><svg><use href="#i-eraser"/></svg></span>
+        <div class="row-main">
+          <span class="row-title" id="remove-label">Remove</span>
+          <span class="row-sub" id="remove-help"></span>
+        </div>
+      </div>
+      <div class="segmented segmented-3" role="radiogroup" aria-labelledby="remove-label">
+        <label><input type="radio" name="remove" value="all"><span>Everything</span></label>
+        <label><input type="radio" name="remove" value="location"><span>Location only</span></label>
+        <label><input type="radio" name="remove" value="custom"><span>Custom</span></label>
+      </div>
+      <div class="custom-list" id="custom-list" hidden>
+        <label class="row sub-row"><span class="row-main"><span class="row-title">Remove location</span></span><input class="switch" type="checkbox" role="switch" data-rm="location"></label>
+        <label class="row sub-row"><span class="row-main"><span class="row-title">Remove camera and device</span></span><input class="switch" type="checkbox" role="switch" data-rm="camera"></label>
+        <label class="row sub-row"><span class="row-main"><span class="row-title">Remove dates and times</span></span><input class="switch" type="checkbox" role="switch" data-rm="dates"></label>
+        <label class="row sub-row"><span class="row-main"><span class="row-title">Remove author and captions</span></span><input class="switch" type="checkbox" role="switch" data-rm="author"></label>
+        <label class="row sub-row"><span class="row-main"><span class="row-title">Remove AI generation data</span></span><input class="switch" type="checkbox" role="switch" data-rm="ai"></label>
+        <p class="sub-note">Content Credentials, hidden thumbnails and maker notes are always removed: they can hold location, and any edit breaks them anyway.</p>
+      </div>
+
       <div class="row">
         <span class="row-icon" aria-hidden="true"><svg><use href="#i-image"/></svg></span>
         <div class="row-main">
@@ -171,6 +194,7 @@
       <li class="row"><span class="row-icon" aria-hidden="true"><svg><use href="#i-cpu"/></svg></span><div class="row-main"><span class="row-title">AI generation data</span><span class="row-sub">Prompts, seeds and settings from Stable Diffusion, ComfyUI, NovelAI and others</span></div></li>
       <li class="row"><span class="row-icon" aria-hidden="true"><svg><use href="#i-badge"/></svg></span><div class="row-main"><span class="row-title">Content Credentials</span><span class="row-sub">C2PA manifests from Firefly, ChatGPT, Photoshop and cameras</span></div></li>
       <li class="row"><span class="row-icon" aria-hidden="true"><svg><use href="#i-user"/></svg></span><div class="row-main"><span class="row-title">Author and edit history</span><span class="row-sub">XMP and IPTC fields, keywords, captions and document IDs</span></div></li>
+      <li class="row"><span class="row-icon" aria-hidden="true"><svg><use href="#i-video"/></svg></span><div class="row-main"><span class="row-title">Videos</span><span class="row-sub">Location, device, dates and titles in MP4 and MOV, without re-encoding</span></div></li>
       <li class="row"><span class="row-icon" aria-hidden="true"><svg><use href="#i-layers"/></svg></span><div class="row-main"><span class="row-title">Hidden images</span><span class="row-sub">Thumbnails, motion photo clips and data tucked after the image</span></div></li>
     </ul>
     <div class="card note-card">

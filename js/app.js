@@ -1,6 +1,8 @@
 import { inspect, formatBytes } from './meta.js';
 import { cleanImage, canEncodeAvif, LOSSLESS, LOOKS_SAME } from './clean.js';
 import { makeZip } from './zip.js';
+import { removeSet, CATEGORIES, CATEGORY_NAMES, CATEGORY_GROUPS } from './keep.js';
+import { isVideo, inspectVideo, cleanVideo } from './video.js';
 
 const $ = (s) => document.querySelector(s);
 // Present only inside the Android app.
@@ -9,14 +11,17 @@ const items = [];
 let nextId = 1;
 let busy = false;
 
-const FORMAT_NAMES = { jpeg: 'JPEG', png: 'PNG', webp: 'WebP', avif: 'AVIF', heic: 'HEIC', gif: 'GIF', tiff: 'TIFF', bmp: 'BMP', ico: 'ICO', other: 'Image' };
-const GROUP_ICONS = { ai: 'cpu', c2pa: 'badge', gps: 'pin', camera: 'camera', author: 'user', xmp: 'text', text: 'text', comment: 'text', thumb: 'layers', icc: 'palette', other: 'dots' };
+const FORMAT_NAMES = { jpeg: 'JPEG', png: 'PNG', webp: 'WebP', avif: 'AVIF', heic: 'HEIC', gif: 'GIF', tiff: 'TIFF', bmp: 'BMP', ico: 'ICO', video: 'Video', other: 'Image' };
+const GROUP_ICONS = { ai: 'cpu', c2pa: 'badge', gps: 'pin', camera: 'camera', dates: 'text', author: 'user', xmp: 'text', text: 'text', comment: 'text', thumb: 'layers', icc: 'palette', other: 'dots' };
 const FLAG_NAMES = { gps: 'Location', ai: 'AI data', c2pa: 'Content Credentials', camera: 'Camera', author: 'Author' };
 
 // ---- Settings -------------------------------------------------------------
 
 const QUALITIES = ['smart', '90', '70', '50'];
-const defaults = { mode: 'lossless', format: 'same', quality: 'smart', fingerprint: false, keepIcc: true, rename: true };
+const defaults = {
+  mode: 'lossless', format: 'same', quality: 'smart', fingerprint: false, keepIcc: true, rename: true,
+  remove: 'all', rm_location: true, rm_camera: true, rm_dates: true, rm_author: true, rm_ai: true,
+};
 const settings = { ...defaults, ...load('settings') };
 if (!QUALITIES.includes(String(settings.quality))) settings.quality = 'smart';
 
@@ -31,6 +36,15 @@ function bindSettings() {
   for (const r of document.querySelectorAll('input[name=mode]')) {
     r.checked = r.value === settings.mode;
     r.addEventListener('change', () => { settings.mode = r.value; settingsChanged(); });
+  }
+  for (const r of document.querySelectorAll('input[name=remove]')) {
+    r.checked = r.value === settings.remove;
+    r.addEventListener('change', () => { settings.remove = r.value; settingsChanged(); });
+  }
+  for (const sw of document.querySelectorAll('[data-rm]')) {
+    const key = `rm_${sw.dataset.rm}`;
+    sw.checked = settings[key] !== false;
+    sw.addEventListener('change', () => { settings[key] = sw.checked; settingsChanged(); });
   }
   for (const r of document.querySelectorAll('input[name=quality]')) {
     r.checked = r.value === String(settings.quality);
@@ -55,6 +69,14 @@ function bindSettings() {
 
 function renderSettings() {
   for (const el of document.querySelectorAll('[data-for]')) el.hidden = el.dataset.for !== settings.mode;
+  $('#custom-list').hidden = settings.remove !== 'custom';
+  const rm = removeSet(settings);
+  const keep = CATEGORIES.filter((c) => !rm.has(c)).map((c) => CATEGORY_NAMES[c].toLowerCase());
+  $('#remove-help').textContent = settings.remove === 'all'
+    ? 'All metadata comes off.'
+    : settings.remove === 'location'
+      ? 'Only where it was taken comes off. Camera details, dates and captions stay.'
+      : keep.length ? `Keeps ${keep.join(', ')}. Everything else comes off.` : 'All metadata comes off.';
   $('#quality-help').textContent = settings.quality === 'smart'
     ? 'Finds the smallest file that still looks the same as the original. PNG stays lossless.'
     : `Saves at ${settings.quality}% for a smaller file. Each photo is checked afterwards. PNG stays lossless.`;
@@ -75,30 +97,86 @@ function settingsChanged() {
 // ---- Adding files ---------------------------------------------------------
 
 async function addFiles(fileList) {
-  const files = [...fileList].filter((f) => f && (f.type.startsWith('image/') || /\.(jpe?g|png|webp|avif|heic|heif|gif|tiff?|bmp|ico)$/i.test(f.name)));
-  if (!files.length) { toast('Those files are not images'); return; }
-  const added = files.map((file) => ({ id: nextId++, file, status: 'reading', info: null, out: null, url: URL.createObjectURL(file) }));
+  const files = [...fileList].filter((f) => f && (f.type.startsWith('image/') || isVideo(f) || /\.(jpe?g|png|webp|avif|heic|heif|gif|tiff?|bmp|ico)$/i.test(f.name)));
+  if (!files.length) { toast('Those files are not photos or videos'); return; }
+  const added = files.map((file) => ({ id: nextId++, file, video: isVideo(file), status: 'reading', info: null, out: null, thumb: null }));
   items.push(...added);
   $('#photos').hidden = false;
   renderList();
   updateActions();
+  // One file at a time, and nothing kept but the report and a small thumbnail, so a big batch
+  // uses about as much memory as a single photo.
   for (const it of added) {
+    if (!items.includes(it)) continue;
     try {
-      it.bytes = new Uint8Array(await it.file.arrayBuffer());
-      it.info = await inspect(it.bytes);
+      if (it.video) it.info = await inspectVideo(it.file);
+      else it.info = await inspect(new Uint8Array(await it.file.arrayBuffer()));
       it.status = 'ready';
     } catch {
       it.status = 'error';
       it.error = 'Could not read this file';
     }
     renderRow(it);
+    it.thumb = await makeThumb(it);
+    renderRow(it);
   }
   renderSummary();
   updateActions();
-  announce(`${files.length} ${plural(files.length, 'photo')} added`);
+  announce(`${files.length} ${plural(files.length, 'file')} added`);
 }
 
 const plural = (n, w) => (n === 1 ? w : `${w}s`);
+
+// A 96px preview drawn once, so the list never holds full-size images.
+async function makeThumb(it) {
+  try {
+    const src = it.video ? await videoFrame(it.file) : await imageSource(it.file);
+    if (!src) return null;
+    const w = 96, h = Math.max(1, Math.round((96 * src.height) / src.width));
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    c.getContext('2d').drawImage(src.source, 0, 0, w, h);
+    src.done();
+    const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.8));
+    return blob ? URL.createObjectURL(blob) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function imageSource(file) {
+  try {
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image', resizeWidth: 192, resizeQuality: 'medium' });
+    return { source: bmp, width: bmp.width, height: bmp.height, done: () => bmp.close() };
+  } catch {}
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.src = url;
+  try {
+    await img.decode();
+  } catch {
+    URL.revokeObjectURL(url);
+    return null;
+  }
+  return { source: img, width: img.naturalWidth, height: img.naturalHeight, done: () => URL.revokeObjectURL(url) };
+}
+
+function videoFrame(file) {
+  return new Promise((resolve) => {
+    const v = document.createElement('video');
+    const url = URL.createObjectURL(file);
+    const done = (r) => { clearTimeout(timer); resolve(r); };
+    const timer = setTimeout(() => { URL.revokeObjectURL(url); done(null); }, 4000);
+    v.muted = true;
+    v.playsInline = true;
+    v.preload = 'auto';
+    v.onloadeddata = () => { v.currentTime = Math.min(0.5, (v.duration || 1) / 2); };
+    v.onseeked = () => done({ source: v, width: v.videoWidth, height: v.videoHeight, done: () => { v.removeAttribute('src'); v.load(); URL.revokeObjectURL(url); } });
+    v.onerror = () => { URL.revokeObjectURL(url); done(null); };
+    v.src = url;
+  });
+}
 
 // ---- List -----------------------------------------------------------------
 
@@ -118,13 +196,17 @@ function renderRow(it) {
     li.className = 'photo-row';
     li.dataset.id = it.id;
     li.innerHTML = `<button class="photo-open" type="button" aria-haspopup="dialog">
-      <img class="thumb" alt="" decoding="async" loading="lazy">
+      <span class="thumb-icon" aria-hidden="true"><svg><use href="#i-${it.video ? 'video' : 'image'}"/></svg></span>
       <span class="row-main"><span class="row-title"></span><span class="row-sub"></span></span>
       <span class="badge"></span><svg class="chev" aria-hidden="true"><use href="#i-chev"/></svg></button>`;
-    li.querySelector('img').src = it.url;
-    li.querySelector('img').addEventListener('error', (e) => { e.target.style.visibility = 'hidden'; }, { once: true });
     li.querySelector('button').addEventListener('click', () => openSheet(it));
     list.append(li);
+  }
+  if (it.thumb && !li.querySelector('img.thumb')) {
+    const img = el('img', 'thumb');
+    img.alt = '';
+    img.src = it.thumb;
+    li.querySelector('.thumb-icon').replaceWith(img);
   }
   li.classList.toggle('is-working', it.status === 'working' || it.status === 'reading');
   li.querySelector('.row-title').textContent = it.out ? it.out.name : it.file.name;
@@ -136,8 +218,9 @@ function renderRow(it) {
   else if (it.status === 'error') { sub.textContent = it.error; badge.textContent = '!'; label = 'error'; }
   else if (it.status === 'working') { sub.textContent = 'Cleaning'; badge.textContent = '…'; label = 'cleaning'; }
   else if (it.out) {
-    const left = it.out.verify.count;
-    sub.textContent = left ? `${left} item${left === 1 ? '' : 's'} left, see details` : `Clean · ${formatBytes(it.out.blob.size)}`;
+    const left = leftovers(it).length;
+    const kept = keptNames(it);
+    sub.textContent = left ? 'Some data left, see details' : kept.length ? `Cleaned · kept ${kept.join(', ').toLowerCase()}` : `Clean · ${formatBytes(it.out.blob.size)}`;
     badge.classList.add('is-clean');
     badge.innerHTML = '<svg aria-hidden="true"><use href="#i-check"/></svg>';
     label = left ? 'cleaned with notes' : 'clean';
@@ -157,7 +240,7 @@ function renderSummary() {
   const done = items.filter((i) => i.out).length;
   const gps = ready.filter((i) => i.info.flags.includes('gps')).length;
   const ai = ready.filter((i) => i.info.flags.includes('ai') || i.info.flags.includes('c2pa')).length;
-  const bits = [`${items.length} ${plural(items.length, 'photo')}`];
+  const bits = [`${items.length} ${plural(items.length, 'file')}`];
   if (done) bits.push(`${done} cleaned`);
   else {
     bits.push(`${total} ${plural(total, 'item')} found`);
@@ -181,9 +264,19 @@ async function cleanAll() {
     $('#run-label').textContent = `Cleaning ${++n} of ${todo.length}`;
     await new Promise(requestAnimationFrame);
     try {
-      const out = await cleanImage(it.bytes, it.file, it.info, settings);
-      const outBytes = new Uint8Array(await out.blob.arrayBuffer());
-      out.verify = await inspect(outBytes);
+      let out;
+      if (it.video) {
+        const blob = await cleanVideo(it.file, removeSet(settings));
+        const ext = (it.file.name.match(/\.[^.]+$/) || ['.mp4'])[0].toLowerCase();
+        const base = settings.rename ? `video-${Math.random().toString(16).slice(2, 10)}` : it.file.name.replace(/\.[^.]+$/, '');
+        out = { blob, format: 'video', lossless: true, kept: [], notes: [], removed: removeSet(settings), name: base + ext };
+        out.verify = await inspectVideo(new File([blob], out.name, { type: blob.type }));
+      } else {
+        // Read the original only for as long as this one file takes.
+        const bytes = new Uint8Array(await it.file.arrayBuffer());
+        out = await cleanImage(bytes, it.file, it.info, settings);
+        out.verify = await inspect(new Uint8Array(await out.blob.arrayBuffer()));
+      }
       out.file = new File([out.blob], out.name, { type: out.blob.type, lastModified: Date.now() });
       it.out = out;
       it.status = 'done';
@@ -197,8 +290,7 @@ async function cleanAll() {
   renderSummary();
   updateActions();
   const ok = items.filter((i) => i.out).length;
-  announce(`${ok} ${plural(ok, 'photo')} cleaned`);
-  toast(`${ok} ${plural(ok, 'photo')} cleaned`);
+  toast(`${ok} ${plural(ok, 'file')} cleaned`);
 }
 
 function updateActions() {
@@ -215,16 +307,16 @@ function updateActions() {
   if (pending) {
     run.dataset.action = 'clean';
     run.querySelector('use').setAttribute('href', '#i-eraser');
-    $('#run-label').textContent = `Clean ${pending} ${plural(pending, 'photo')}`;
+    $('#run-label').textContent = `Clean ${pending} ${plural(pending, 'file')}`;
     zip.hidden = true;
   } else if (done.length) {
     run.dataset.action = 'save';
     run.querySelector('use').setAttribute('href', '#i-save');
-    $('#run-label').textContent = done.length === 1 ? 'Save photo' : `Save ${done.length} photos`;
+    $('#run-label').textContent = done.length === 1 ? 'Save file' : `Save ${done.length} files`;
     zip.hidden = done.length < 2;
   } else {
     run.disabled = true;
-    $('#run-label').textContent = 'Clean photos';
+    $('#run-label').textContent = 'Clean files';
     zip.hidden = true;
   }
 }
@@ -246,11 +338,26 @@ function toBase64(blob) {
   });
 }
 
+// Streams a blob to the Android app in 3 MB pieces, so a long video never becomes one huge string.
+async function nativeWrite(target, name, mime, blob) {
+  const id = native.openOutput(target, name, mime || 'application/octet-stream');
+  if (id < 0) return false;
+  const CHUNK = 3 * 1024 * 1024;
+  for (let at = 0; at < blob.size; at += CHUNK) {
+    if (!native.writeChunk(id, await toBase64(blob.slice(at, at + CHUNK)))) { native.abortOutput(id); return false; }
+  }
+  return native.closeOutput(id) ? id : false;
+}
+
 async function saveFiles(list) {
   if (native) {
     let ok = 0;
-    for (const it of list) if (native.saveToGallery(it.out.name, it.out.blob.type, await toBase64(it.out.blob))) ok++;
-    toast(ok === list.length ? `Saved to Pictures/Plainframe` : `Saved ${ok} of ${list.length}`);
+    for (let i = 0; i < list.length; i++) {
+      if (list.length > 1) toast(`Saving ${i + 1} of ${list.length}`);
+      if (await nativeWrite('media', list[i].out.name, list[i].out.blob.type, list[i].out.blob)) ok++;
+    }
+    const where = list.every((i) => i.video) ? 'Movies/Plainframe' : list.some((i) => i.video) ? 'Pictures and Movies' : 'Pictures/Plainframe';
+    toast(ok === list.length ? `Saved to ${where}` : `Saved ${ok} of ${list.length}`);
     return;
   }
   const files = list.map((i) => i.out.file);
@@ -272,9 +379,13 @@ const canShare = () => !!native || (preferShare() && canShareFiles([new File([''
 
 async function shareFiles(list) {
   if (native) {
-    const files = [];
-    for (const it of list) files.push({ name: it.out.name, mime: it.out.blob.type, data: await toBase64(it.out.blob) });
-    if (!native.share(JSON.stringify(files))) toast('Could not open sharing');
+    native.clearShareCache();
+    const ids = [];
+    for (const it of list) {
+      const id = await nativeWrite('share', it.out.name, it.out.blob.type, it.out.blob);
+      if (id !== false) ids.push(id);
+    }
+    if (!ids.length || !native.shareOutputs(JSON.stringify(ids))) toast('Could not open sharing');
     return;
   }
   try { await navigator.share({ files: list.map((i) => i.out.file) }); } catch {}
@@ -284,10 +395,16 @@ async function saveZip() {
   const done = items.filter((i) => i.out);
   if (!done.length) return;
   toast('Making ZIP');
-  const blob = await makeZip(done.map((i) => ({ name: i.out.name, blob: i.out.blob })));
-  const name = `plainframe-${done.length}-photos.zip`;
+  let blob;
+  try {
+    blob = await makeZip(done.map((i) => ({ name: i.out.name, blob: i.out.blob })));
+  } catch (err) {
+    toast(err.message);
+    return;
+  }
+  const name = `plainframe-${done.length}-files.zip`;
   if (native) {
-    toast(native.saveToDownloads(name, 'application/zip', await toBase64(blob)) ? 'ZIP saved to Downloads' : 'Could not save the ZIP');
+    toast((await nativeWrite('downloads', name, 'application/zip', blob)) !== false ? 'ZIP saved to Downloads' : 'Could not save the ZIP');
     return;
   }
   download(blob, name);
@@ -330,7 +447,7 @@ function renderSheet() {
   const info = it.info;
   const head = el('div', 'sheet-head');
   const img = el('img');
-  img.src = it.url;
+  if (it.thumb) img.src = it.thumb;
   img.alt = '';
   const hgroup = el('div');
   const h = el('h2', '', it.file.name);
@@ -351,6 +468,7 @@ function renderSheet() {
   }
 
   if (it.out) body.append(verdict(it));
+  if (it.out && !it.video) body.append(compareView(it));
 
   if (it.out && info.groups.length) body.append(el('h3', 'sheet-sub', 'Found in the original'));
   if (!info.groups.length) body.append(el('p', 'empty-note', 'No metadata found in this file. You can still clean it to get a fresh copy.'));
@@ -388,26 +506,43 @@ function renderSheet() {
   body.append(actions);
 }
 
+// Groups still in the cleaned file that the person asked to remove.
+function leftovers(it) {
+  const allowed = new Set(['icc']);
+  for (const c of CATEGORIES) if (!it.out.removed.has(c)) for (const g of CATEGORY_GROUPS[c]) allowed.add(g);
+  return it.out.verify.groups.filter((g) => !allowed.has(g.key));
+}
+
+function keptNames(it) {
+  const present = new Set(it.out.verify.groups.map((g) => g.key));
+  return CATEGORIES.filter((c) => !it.out.removed.has(c) && CATEGORY_GROUPS[c].some((g) => g !== 'xmp' && present.has(g))).map((c) => CATEGORY_NAMES[c]);
+}
+
 function verdict(it) {
-  const v = it.out.verify;
-  const box = el('div', `verdict${v.count ? '' : ' is-ok'}`);
+  const left = leftovers(it);
+  const box = el('div', `verdict${left.length ? '' : ' is-ok'}`);
   const icon = el('span', 'row-icon');
-  icon.innerHTML = `<svg aria-hidden="true"><use href="#i-${v.count ? 'dots' : 'check'}"/></svg>`;
+  icon.innerHTML = `<svg aria-hidden="true"><use href="#i-${left.length ? 'dots' : 'check'}"/></svg>`;
   const text = el('div');
-  const size = `${formatBytes(it.file.size)} to ${formatBytes(it.out.blob.size)}`;
-  let how = it.out.lossless ? 'Pixels untouched' : `Redrawn as ${FORMAT_NAMES[it.out.format]}`;
+  const size = it.video ? `${formatBytes(it.out.blob.size)}, same layout as the original` : `${formatBytes(it.file.size)} to ${formatBytes(it.out.blob.size)}`;
+  let how = it.video ? 'Not re-encoded' : it.out.lossless ? 'Pixels untouched' : `Redrawn as ${FORMAT_NAMES[it.out.format]}`;
   if (it.out.quality) {
     const m = it.out.match;
     const look = m >= LOOKS_SAME ? 'looks the same as the original' : m >= 37 ? 'small differences up close' : 'some loss is visible';
     how += ` at ${it.out.quality}% quality, ${look} (${m >= 99 ? 'exact' : `${m.toFixed(1)} dB`})`;
   }
-  if (v.count) {
-    text.append(el('strong', '', 'Checked, some data left'), el('p', '', `${v.groups.filter((g) => g.key !== 'icc').map((g) => g.title).join(', ')}. Try Redraw for a fully fresh file.`));
+  const keptCats = keptNames(it);
+  if (left.length) {
+    text.append(el('strong', '', 'Checked, some data left'), el('p', '', `${left.map((g) => g.title).join(', ')}.${it.video ? '' : ' Try Redraw for a fully fresh file.'}`));
+  } else if (keptCats.length) {
+    text.append(el('strong', '', 'Checked: removed what you chose'), el('p', '', `${how}. ${size}.`));
   } else {
     text.append(el('strong', '', 'Checked: no metadata left'), el('p', '', `${how}. ${size}.`));
   }
-  const kept = [...it.out.kept];
-  if (!it.out.lossless && it.out.blob.size > it.file.size * 1.05) text.append(el('p', '', 'This file came out larger than the original. For graphics and screenshots, Keep quality or PNG usually stays smaller.'));
+  const kept = [...keptCats, ...it.out.kept];
+  for (const n of it.out.notes || []) text.append(el('p', '', `${n}.`));
+  if (it.video && settings.mode === 'redraw') text.append(el('p', '', 'Videos are always cleaned without re-encoding.'));
+  if (!it.video && !it.out.lossless && it.out.blob.size > it.file.size * 1.05) text.append(el('p', '', 'This file came out larger than the original. For graphics and screenshots, Keep quality or PNG usually stays smaller.'));
   if (it.out.scaled) kept.push('Resized to fit the browser’s canvas limit');
   if (it.out.fellBack) kept.push(`Saved as ${FORMAT_NAMES[it.out.format]} because this browser cannot write ${FORMAT_NAMES[it.out.fellBack]}`);
   if (kept.length) text.append(el('p', '', `Kept: ${kept.join('; ')}.`));
@@ -430,10 +565,71 @@ function button(label, icon, cls) {
   return b;
 }
 
+// Before and after, with a divider you drag and a 1:1 zoom to judge compression up close.
+function compareView(it) {
+  const sec = el('section', 'compare');
+  sec.append(el('h3', 'sheet-sub', 'Compare'));
+  const box = el('div', 'cmp-box');
+  const stage = el('div', 'cmp-stage');
+  const before = el('img');
+  const after = el('img');
+  const line = el('div', 'cmp-line');
+  before.alt = 'Original';
+  after.alt = 'Cleaned';
+  const a = URL.createObjectURL(it.file);
+  const b = URL.createObjectURL(it.out.blob);
+  sheetUrls.push(a, b);
+  stage.style.aspectRatio = '3 / 2';
+  stage.append(before, after, line);
+  box.append(stage);
+  const tags = el('div', 'cmp-tags');
+  tags.append(el('span', '', 'Original'), el('span', '', 'Cleaned'));
+  const controls = el('div', 'cmp-controls');
+  const range = el('input');
+  range.type = 'range';
+  range.min = '0';
+  range.max = '100';
+  range.value = '50';
+  range.setAttribute('aria-label', 'Divider between original and cleaned');
+  const zoom = el('button', 'text-button', 'Zoom to 100%');
+  zoom.type = 'button';
+  zoom.setAttribute('aria-pressed', 'false');
+  controls.append(range, zoom);
+  const set = () => {
+    after.style.clipPath = `inset(0 0 0 ${range.value}%)`;
+    line.style.left = `${range.value}%`;
+  };
+  range.addEventListener('input', set);
+  set();
+  after.onload = () => {
+    stage.style.aspectRatio = `${after.naturalWidth} / ${after.naturalHeight}`;
+    stage.style.setProperty('--zw', `${after.naturalWidth / (devicePixelRatio || 1)}px`);
+  };
+  before.onerror = () => {
+    sec.replaceChildren(el('h3', 'sheet-sub', 'Compare'), el('p', 'empty-note', 'This browser cannot show the original format, so there is nothing to compare against.'));
+  };
+  zoom.addEventListener('click', () => {
+    const on = !box.classList.contains('is-zoomed');
+    box.classList.toggle('is-zoomed', on);
+    zoom.textContent = on ? 'Fit' : 'Zoom to 100%';
+    zoom.setAttribute('aria-pressed', String(on));
+    if (on) requestAnimationFrame(() => {
+      box.scrollLeft = (box.scrollWidth - box.clientWidth) / 2;
+      box.scrollTop = (box.scrollHeight - box.clientHeight) / 2;
+    });
+  });
+  before.src = a;
+  after.src = b;
+  sec.append(box, tags, controls);
+  return sec;
+}
+
+const sheetUrls = [];
+
 function removeItem(it) {
   const i = items.indexOf(it);
   if (i >= 0) items.splice(i, 1);
-  URL.revokeObjectURL(it.url);
+  if (it.thumb) URL.revokeObjectURL(it.thumb);
   if (!items.length) $('#photos').hidden = true;
   renderList();
   updateActions();
@@ -444,6 +640,8 @@ function setupSheet() {
   $('#sheet-close').addEventListener('click', closeSheet);
   d.addEventListener('click', (e) => { if (e.target === d) closeSheet(); });
   d.addEventListener('close', () => {
+    while (sheetUrls.length) URL.revokeObjectURL(sheetUrls.pop());
+    $('#sheet-body').textContent = '';
     document.documentElement.style.overflow = '';
     d.style.translate = '';
     sheetItem = null;
@@ -533,7 +731,7 @@ function setupTheme() {
 
 function setupApp() {
   if (native) {
-    $('#offline-status').textContent = 'Runs on this phone with no internet permission. Photos are never uploaded.';
+    $('#offline-status').textContent = 'Runs on this phone with no internet permission. Nothing is ever uploaded.';
     window.plainframeBack = () => {
       if ($('#sheet').open) { closeSheet(); return true; }
       return false;
@@ -544,7 +742,7 @@ function setupApp() {
   }
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').then(() => navigator.serviceWorker.ready).then(() => {
-      $('#offline-status').textContent = 'Runs on this device and works offline. Photos are never uploaded.';
+      $('#offline-status').textContent = 'Runs on this device and works offline. Nothing is ever uploaded.';
     }).catch(() => {});
   }
   let deferred = null;
@@ -632,7 +830,7 @@ $('#run').addEventListener('click', () => {
 });
 $('#zip').addEventListener('click', saveZip);
 $('#clear').addEventListener('click', () => {
-  for (const it of items) URL.revokeObjectURL(it.url);
+  for (const it of items) if (it.thumb) URL.revokeObjectURL(it.thumb);
   items.length = 0;
   $('#photos').hidden = true;
   renderList();
