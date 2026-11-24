@@ -18,6 +18,9 @@ export function detectFormat(b) {
     if (/hei[cx]|hevc|heim|heis|mif1|msf1/.test(brands)) return 'heic';
   }
   if (str(b, 0, 4) === 'GIF8') return 'gif';
+  if ((b[0] === 0x49 && b[1] === 0x49 && b[2] === 0x2a && b[3] === 0) || (b[0] === 0x4d && b[1] === 0x4d && b[2] === 0 && b[3] === 0x2a)) return 'tiff';
+  if (b[0] === 0x42 && b[1] === 0x4d) return 'bmp';
+  if (b[0] === 0 && b[1] === 0 && (b[2] === 1 || b[2] === 2) && b[3] === 0) return 'ico';
   return 'other';
 }
 
@@ -90,7 +93,7 @@ class Report {
       groups,
       orientation: this.orientation,
       ai: [...this.ai],
-      flags: [...this.flags],
+      flags: ['gps', 'ai', 'c2pa', 'camera', 'author'].filter((f) => this.flags.has(f)),
       count: removable.reduce((n, g) => n + Math.max(1, g.items.length), 0),
       hasIcc: this.groups.has('icc'),
     };
@@ -133,7 +136,9 @@ export async function inspect(bytes) {
     if (format === 'jpeg') readJpeg(bytes, r);
     else if (format === 'png') await readPng(bytes, r);
     else if (format === 'webp') readWebp(bytes, r);
-    else readByScan(bytes, r);
+    else if (format === 'gif') readGif(bytes, r);
+    else if (format === 'tiff') readTiff(bytes, r, 0, true);
+    else if (format !== 'bmp' && format !== 'ico') readByScan(bytes, r);
   } catch (err) {
     r.add('other', 'Note', 'Part of this file could not be read');
   }
@@ -279,9 +284,11 @@ const TAGS_EXIF = {
   0xa431: ['camera', 'Camera serial'], 0xa433: ['camera', 'Lens make'], 0xa434: ['camera', 'Lens'],
   0xa435: ['camera', 'Lens serial'],
 };
+// Tags that describe the pixels of a TIFF file rather than where it came from.
+const STRUCTURE = new Set([0xfe, 0xff, 0x100, 0x101, 0x102, 0x103, 0x106, 0x107, 0x10a, 0x111, 0x112, 0x115, 0x116, 0x117, 0x118, 0x119, 0x11a, 0x11b, 0x11c, 0x122, 0x123, 0x128, 0x13d, 0x13e, 0x13f, 0x140, 0x142, 0x143, 0x144, 0x145, 0x147, 0x148, 0x14a, 0x14c, 0x14d, 0x152, 0x153, 0x154, 0x155, 0x156, 0x15b, 0x200, 0x201, 0x202, 0x211, 0x212, 0x213, 0x214]);
 const SIZES = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8 };
 
-export function readTiff(t, r, bytes = t.length) {
+export function readTiff(t, r, bytes = t.length, isFile = false) {
   if (t.length < 8) return;
   const le = t[0] === 0x49;
   const u16 = (i) => (le ? t[i] | (t[i + 1] << 8) : (t[i] << 8) | t[i + 1]);
@@ -323,6 +330,12 @@ export function readTiff(t, r, bytes = t.length) {
       if (kind === 'ifd0' && tag === 0x8769) { ifd(u32(p + 8), 'exif'); continue; }
       if (kind === 'ifd0' && tag === 0x8825) { ifd(u32(p + 8), 'gps'); continue; }
       if (tag === 0xa005) continue;
+      if (tag === 0x02bc) { readXmp(utf8.decode(t.subarray(at, at + size)), r, size); continue; }
+      if (tag === 0x83bb) { r.add('author', '', '', size); readIim(t.subarray(at, at + size), r); continue; }
+      if (tag === 0x8773) { r.add('icc', 'ICC profile', iccName(t.subarray(at, at + size)) || 'Embedded', size); continue; }
+      if (tag === 0x8649) { r.add('other', 'Photoshop resources', formatBytes(size), size); continue; }
+      if (kind === 'ifd0' && tag === 0x0112) { r.orientation = u16(p + 8) || 1; continue; }
+      if (isFile && kind === 'ifd0' && STRUCTURE.has(tag)) { found--; continue; }
       if (kind === 'ifd0' && tag === 0x0112) { r.orientation = u16(p + 8) || 1; continue; }
       if (kind === 'gps') { gps[tag] = value(type, count, at); continue; }
       const def = (kind === 'ifd0' ? TAGS0 : TAGS_EXIF)[tag];
@@ -336,7 +349,7 @@ export function readTiff(t, r, bytes = t.length) {
         r.ai.add('Stable Diffusion settings');
       }
     }
-    if (kind === 'ifd0' && off + 2 + n * 12 + 4 <= t.length) {
+    if (kind === 'ifd0' && !isFile && off + 2 + n * 12 + 4 <= t.length) {
       const next = u32(off + 2 + n * 12);
       if (next) thumbIfd(next);
     }
@@ -369,7 +382,7 @@ export function readTiff(t, r, bytes = t.length) {
   const gpsCount = Object.keys(gps).length;
   if (gpsCount && !r.groups.has('gps')) r.add('gps', 'GPS tags', `${gpsCount}`);
   if (other) r.add('camera', 'Other camera tags', `${other}`);
-  if (found) r.group('camera').bytes += bytes;
+  if (found && r.groups.has('camera')) r.group('camera').bytes += bytes;
 }
 
 function formatTag(tag, type, v, count) {
@@ -652,11 +665,62 @@ function readWebp(b, r) {
   if (trailer > 0) r.add('thumb', 'Data after the image', formatBytes(trailer), trailer);
 }
 
-// ---- AVIF, HEIC, GIF and anything else: scan for known payloads -----------
+// ---- GIF ------------------------------------------------------------------
+
+// Walks GIF blocks. Calls visit(kind, start, end, info) for every block so the cleaner can reuse it.
+export function gifBlocks(b, visit) {
+  let i = 13;
+  if (b[10] & 0x80) i += 3 * (1 << ((b[10] & 7) + 1));
+  visit('head', 0, i);
+  const skipSubBlocks = (p) => { while (p < b.length && b[p] !== 0) p += b[p] + 1; return p + 1; };
+  while (i < b.length) {
+    const start = i;
+    if (b[i] === 0x3b) { visit('end', i, i + 1); return; }
+    if (b[i] === 0x2c) {
+      let p = i + 10;
+      if (b[i + 9] & 0x80) p += 3 * (1 << ((b[i + 9] & 7) + 1));
+      p = skipSubBlocks(p + 1);
+      visit('image', start, p);
+      i = p;
+    } else if (b[i] === 0x21) {
+      const label = b[i + 1];
+      let id = '';
+      if (label === 0xff && b[i + 2] === 11) id = str(b, i + 3, 11);
+      const p = skipSubBlocks(i + 2);
+      const kind = label === 0xf9 ? 'gce' : label === 0x01 ? 'text' : label === 0xfe ? 'comment' : label === 0xff ? (/^(NETSCAPE2\.0|ANIMEXTS1\.0)$/.test(id) ? 'loop' : 'app') : 'ext';
+      visit(kind, start, p, { id, data: b.subarray(i + 2, p) });
+      i = p;
+    } else return;
+  }
+}
+
+function readGif(b, r) {
+  gifBlocks(b, (kind, start, end, info) => {
+    if (kind === 'comment') {
+      let t = '';
+      for (let p = 0; p < info.data.length && info.data[p]; p += info.data[p] + 1) t += latin1.decode(info.data.subarray(p + 1, p + 1 + info.data[p]));
+      r.add('comment', 'Comment', clip(clean(t)) || 'Empty', end - start);
+      r.noteAI(t);
+    } else if (kind === 'app') {
+      if (info.id.startsWith('XMP Data')) {
+        const xs = indexOf(b, '<x:xmpmeta', start, end);
+        const xe = indexOf(b, '</x:xmpmeta>', start, end);
+        if (xs >= 0 && xe > xs) readXmp(utf8.decode(b.subarray(xs, xe + 12)), r, end - start);
+        else r.add('xmp', 'XMP packet', formatBytes(end - start), end - start);
+      } else if (info.id.startsWith('ICCRGBG1')) r.add('icc', 'ICC profile', 'Embedded', end - start);
+      else if (/c2pa/i.test(info.id)) readC2pa(info.data, r);
+      else r.add('other', `${info.id.trim() || 'App'} block`, formatBytes(end - start), end - start);
+    }
+  });
+}
+
+// ---- AVIF, HEIC and anything else: scan for known payloads -----------
 
 function readByScan(b, r) {
-  const ex = indexOf(b, 'Exif\0\0');
-  if (ex >= 0) readTiff(b.subarray(ex + 6), r, 0);
+  // HEIF also names its Exif item type "Exif", so look for the copy followed by a TIFF header.
+  for (let ex = indexOf(b, 'Exif\0\0'); ex >= 0; ex = indexOf(b, 'Exif\0\0', ex + 1)) {
+    if (startsWith(b, ex + 6, 'MM\0*') || startsWith(b, ex + 6, 'II*\0')) { readTiff(b.subarray(ex + 6), r, 0); break; }
+  }
   const xs = indexOf(b, '<x:xmpmeta');
   if (xs >= 0) {
     const xe = indexOf(b, '</x:xmpmeta>', xs);

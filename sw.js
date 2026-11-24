@@ -1,5 +1,5 @@
 // Caches the app on install so it opens with no connection, and receives photos shared from other apps (Android).
-const VERSION = 'plainframe-v1';
+const VERSION = 'plainframe-v2';
 const SHELL = [
   './',
   'index.html',
@@ -9,6 +9,11 @@ const SHELL = [
   'js/meta.js',
   'js/clean.js',
   'js/zip.js',
+  'js/decode.js',
+  'vendor/utif/UTIF.js',
+  'vendor/utif/pako_inflate.min.js',
+  'vendor/libheif/libheif.js',
+  'vendor/libheif/libheif.wasm',
   'manifest.webmanifest',
   'icons/favicon.png',
   'icons/apple-touch-icon.png',

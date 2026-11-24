@@ -47,7 +47,7 @@
 :root[data-theme='dark'] {
   --bg: #190207;
   --bg-alt: #2a0a13;
-  --panel: #2a0a13;
+  --panel: #200510;
   --text: #fff0f3;
   --text-2: #d9a7b3;
   --accent: #ff4d7d;
@@ -64,7 +64,7 @@
   --btn-outline: #ff4d7d;
   --hero-bg: #ff004d;
   --hero-text: #190207;
-  --hero-text-2: #3d0414;
+  --hero-text-2: #190207;
   --hero-btn: #190207;
   --hero-btn-text: #ffffff;
   --art-1: #ffd6df;
@@ -165,12 +165,12 @@ main:focus { outline: none; }
   position: relative; overflow: hidden;
   background: var(--hero-bg); color: var(--hero-text);
   border-radius: var(--radius-card);
-  padding: 32px; min-height: 280px;
-  display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start; gap: 20px;
+  padding: 32px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 20px;
   transition: transform .3s var(--ease), box-shadow .3s var(--ease);
 }
 .drop-card.is-over { transform: scale(1.01); box-shadow: 0 0 0 4px var(--focus); }
-.drop-art { position: absolute; top: 12px; right: 4px; width: 220px; height: 160px; stroke: none; pointer-events: none; }
+.drop-art { align-self: flex-end; width: 176px; height: 128px; margin: -12px -12px -8px 0; stroke: none; pointer-events: none; }
 .art-ring { fill: none; stroke: var(--art-1); stroke-width: 22; }
 .art-tri { fill: var(--art-2); }
 .art-sq { fill: var(--art-3); }
@@ -239,8 +239,9 @@ input[type='range'] { width: 100%; accent-color: var(--btn-bg); height: 32px; ma
   background: #fff; box-shadow: 0 2px 4px rgba(0, 0, 0, .25); transition: translate .25s var(--ease);
 }
 .switch:checked { background: var(--btn-bg); }
+/* Settings are restored after first paint; without this the switches visibly flip on load. */
+html:not(.is-ready) .switch, html:not(.is-ready) .switch::after, html:not(.is-ready) .segmented span { transition: none; }
 .switch:checked::after { translate: 20px 0; }
-:root[data-theme='dark'] .switch:checked::after { background: var(--bg); }
 
 .photo-list { display: flex; flex-direction: column; gap: 2px; }
 .photo-list:empty { display: none; }
@@ -337,6 +338,8 @@ input[type='range'] { width: 100%; accent-color: var(--btn-bg); height: 32px; ma
 }
 .chip.is-hot { background: var(--btn-bg); color: var(--btn-text); }
 .meta-group { margin-top: 24px; }
+.sheet-sub { margin-top: 32px; font-size: 20px; font-weight: 600; }
+.sheet-sub + .meta-group { margin-top: 12px; }
 .meta-group h3 { font-size: 14px; font-weight: 600; color: var(--text-2); margin-bottom: 8px; display: flex; gap: 8px; align-items: center; }
 .meta-group h3 svg { font-size: 16px; }
 .meta-table { margin: 0; background: var(--bg-alt); border-radius: var(--radius-row); padding: 4px 16px; }
@@ -378,8 +381,8 @@ input[type='range'] { width: 100%; accent-color: var(--btn-bg); height: 32px; ma
   .hero { padding-top: 16px; }
   .hero h1 { font-size: 34px; }
   .lede { font-size: 17px; }
-  .drop-card { padding: 24px; min-height: 248px; }
-  .drop-art { width: 180px; height: 131px; right: -4px; top: 8px; }
+  .drop-card { padding: 24px; gap: 16px; }
+  .drop-art { width: 144px; height: 104px; margin-bottom: -12px; }
   .drop-copy h2 { font-size: 28px; }
   .drop-card .button { width: 100%; }
   .section { padding-top: 40px; }

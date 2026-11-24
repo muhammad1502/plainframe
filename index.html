@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; manifest-src 'self'; worker-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; manifest-src 'self'; worker-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <title>Plainframe</title>
 <meta name="description" content="Remove location, camera details, AI prompts and Content Credentials from photos. Runs on your device and works offline.">
@@ -84,13 +84,13 @@
       </svg>
       <div class="drop-copy">
         <h2 id="add-title">Add photos</h2>
-        <p>JPG, PNG, WebP, AVIF and HEIC. As many as you like.</p>
+        <p>JPG, PNG, HEIC, WebP, AVIF, GIF, TIFF and BMP. As many as you like.</p>
       </div>
       <label class="button button-inverse" for="picker">
         <svg aria-hidden="true"><use href="#i-plus"/></svg>
         <span>Choose photos</span>
       </label>
-      <input id="picker" class="visually-hidden" type="file" multiple accept="image/*,.heic,.heif,.avif,.webp">
+      <input id="picker" class="visually-hidden" type="file" multiple accept="image/*,.jpg,.jpeg,.png,.heic,.heif,.webp,.avif,.gif,.tif,.tiff,.bmp,.ico">
       <p class="drop-hint" aria-hidden="true">or drop them here</p>
     </div>
   </section>
@@ -178,7 +178,7 @@
 </main>
 
 <footer class="footer viewport-content">
-  <p><svg aria-hidden="true"><use href="#i-wifi-off"/></svg><span id="offline-status">Runs on this device. It makes no network requests.</span></p>
+  <p><svg aria-hidden="true"><use href="#i-wifi-off"/></svg><span id="offline-status">Runs on this device. Photos are never uploaded.</span></p>
   <p class="install-tip" id="ios-tip" hidden>To install on iPhone: tap Share, then Add to Home Screen.</p>
 </footer>
 

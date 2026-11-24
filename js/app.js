@@ -7,7 +7,7 @@ const items = [];
 let nextId = 1;
 let busy = false;
 
-const FORMAT_NAMES = { jpeg: 'JPEG', png: 'PNG', webp: 'WebP', avif: 'AVIF', heic: 'HEIC', gif: 'GIF', other: 'Image' };
+const FORMAT_NAMES = { jpeg: 'JPEG', png: 'PNG', webp: 'WebP', avif: 'AVIF', heic: 'HEIC', gif: 'GIF', tiff: 'TIFF', bmp: 'BMP', ico: 'ICO', other: 'Image' };
 const GROUP_ICONS = { ai: 'cpu', c2pa: 'badge', gps: 'pin', camera: 'camera', author: 'user', xmp: 'text', text: 'text', comment: 'text', thumb: 'layers', icc: 'palette', other: 'dots' };
 const FLAG_NAMES = { gps: 'Location', ai: 'AI data', c2pa: 'Content Credentials', camera: 'Camera', author: 'Author' };
 
@@ -50,8 +50,8 @@ function renderSettings() {
   for (const el of document.querySelectorAll('[data-for]')) el.hidden = el.dataset.for !== settings.mode;
   $('#quality-out').textContent = settings.quality;
   $('#mode-help').textContent = settings.mode === 'lossless'
-    ? 'Removes metadata and keeps every pixel. AVIF and HEIC are redrawn.'
-    : 'Paints a brand-new image, so nothing old can come along.';
+    ? 'Removes metadata and keeps every pixel and animation. HEIC, AVIF, TIFF and BMP are redrawn.'
+    : 'Paints a brand-new image, so nothing old can come along. Animations keep only the first frame.';
 }
 
 function settingsChanged() {
@@ -66,7 +66,7 @@ function settingsChanged() {
 // ---- Adding files ---------------------------------------------------------
 
 async function addFiles(fileList) {
-  const files = [...fileList].filter((f) => f && (f.type.startsWith('image/') || /\.(jpe?g|png|webp|avif|heic|heif|gif)$/i.test(f.name)));
+  const files = [...fileList].filter((f) => f && (f.type.startsWith('image/') || /\.(jpe?g|png|webp|avif|heic|heif|gif|tiff?|bmp|ico)$/i.test(f.name)));
   if (!files.length) { toast('Those files are not images'); return; }
   const added = files.map((file) => ({ id: nextId++, file, status: 'reading', info: null, out: null, url: URL.createObjectURL(file) }));
   items.push(...added);
@@ -84,6 +84,7 @@ async function addFiles(fileList) {
     }
     renderRow(it);
   }
+  renderSummary();
   updateActions();
   announce(`${files.length} ${plural(files.length, 'photo')} added`);
 }
@@ -303,13 +304,14 @@ function renderSheet() {
 
   if (info.ai.length || info.flags.length) {
     const chips = el('div', 'chips');
-    for (const a of info.ai) chips.append(el('span', 'chip is-hot', a));
-    for (const f of info.flags) if (f !== 'ai' && FLAG_NAMES[f]) chips.append(el('span', `chip${f === 'gps' || f === 'c2pa' ? ' is-hot' : ''}`, FLAG_NAMES[f]));
+    for (const f of info.flags) if (f !== 'ai' && FLAG_NAMES[f]) chips.append(el('span', `chip${f === 'gps' ? ' is-hot' : ''}`, FLAG_NAMES[f]));
+    for (const a of info.ai) chips.append(el('span', `chip${a === 'Marked as AI-made' ? ' is-hot' : ''}`, a));
     body.append(chips);
   }
 
   if (it.out) body.append(verdict(it));
 
+  if (it.out && info.groups.length) body.append(el('h3', 'sheet-sub', 'Found in the original'));
   if (!info.groups.length) body.append(el('p', 'empty-note', 'No metadata found in this file. You can still clean it to get a fresh copy.'));
   for (const g of info.groups) {
     const sec = el('section', 'meta-group');
@@ -355,6 +357,7 @@ function verdict(it) {
   }
   const kept = [...it.out.kept];
   if (it.out.scaled) kept.push('Resized to fit the browser’s canvas limit');
+  if (it.out.fellBack) kept.push(`Saved as ${FORMAT_NAMES[it.out.format]} because this browser cannot write ${FORMAT_NAMES[it.out.fellBack]}`);
   if (kept.length) text.append(el('p', '', `Kept: ${kept.join('; ')}.`));
   box.append(icon, text);
   return box;
@@ -478,7 +481,7 @@ function setupTheme() {
 function setupApp() {
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').then(() => navigator.serviceWorker.ready).then(() => {
-      $('#offline-status').textContent = 'Runs on this device and works offline. It makes no network requests.';
+      $('#offline-status').textContent = 'Runs on this device and works offline. Photos are never uploaded.';
     }).catch(() => {});
   }
   let deferred = null;
@@ -535,6 +538,7 @@ function announce(msg) {
 // ---- Start ----------------------------------------------------------------
 
 bindSettings();
+requestAnimationFrame(() => requestAnimationFrame(() => document.documentElement.classList.add('is-ready')));
 setupSheet();
 setupDrop();
 setupTheme();

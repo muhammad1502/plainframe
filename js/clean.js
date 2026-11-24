@@ -1,8 +1,12 @@
-import { detectFormat, jpegSegments, classifyJpeg, pngChunks, PNG_KEEP, webpChunks, WEBP_KEEP } from './meta.js';
+import { detectFormat, jpegSegments, classifyJpeg, pngChunks, PNG_KEEP, webpChunks, WEBP_KEEP, gifBlocks } from './meta.js';
+import { decodeImage } from './decode.js';
 
-const MIME = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', avif: 'image/avif' };
-const EXT = { jpeg: 'jpg', png: 'png', webp: 'webp', avif: 'avif' };
-export const LOSSLESS = new Set(['jpeg', 'png', 'webp']);
+const MIME = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', avif: 'image/avif', gif: 'image/gif' };
+const EXT = { jpeg: 'jpg', png: 'png', webp: 'webp', avif: 'avif', gif: 'gif' };
+const FROM_MIME = { 'image/jpeg': 'jpeg', 'image/png': 'png', 'image/webp': 'webp', 'image/avif': 'avif' };
+export const LOSSLESS = new Set(['jpeg', 'png', 'webp', 'gif']);
+// Graphics without a photo encoder of their own become PNG; photos become JPEG.
+const GRAPHIC = new Set(['gif', 'bmp', 'ico']);
 
 let avifOk;
 export async function canEncodeAvif() {
@@ -17,7 +21,13 @@ export async function canEncodeAvif() {
 export async function cleanImage(bytes, file, info, opts) {
   const format = detectFormat(bytes);
   const lossless = opts.mode === 'lossless' && LOSSLESS.has(format);
-  const out = lossless ? losslessStrip(bytes, format, info, opts) : await redraw(file, format, opts);
+  let out = lossless ? losslessStrip(bytes, format, info, opts) : await redraw(file, bytes, format, opts);
+  if (!lossless && LOSSLESS.has(out.format)) {
+    // Encoders add their own color profile (Chrome writes a generic sRGB one); take it off too.
+    const fresh = new Uint8Array(await out.blob.arrayBuffer());
+    const stripped = losslessStrip(fresh, out.format, { orientation: 1, hasIcc: false }, { keepIcc: false });
+    out = { ...out, blob: stripped.blob };
+  }
   const base = opts.rename ? `photo-${randomId()}` : stripExt(file.name) || 'photo';
   return { ...out, name: `${base}.${EXT[out.format]}` };
 }
@@ -70,6 +80,10 @@ function losslessStrip(b, format, info, opts) {
     new DataView(head.buffer).setUint32(4, size, true);
     head.set([0x57, 0x45, 0x42, 0x50], 8);
     parts.push(head, ...body);
+  } else if (format === 'gif') {
+    gifBlocks(b, (kind, start, end) => {
+      if (kind === 'head' || kind === 'image' || kind === 'gce' || kind === 'loop' || kind === 'text' || kind === 'end') parts.push(b.subarray(start, end));
+    });
   }
   if (opts.keepIcc && info.hasIcc) kept.push('Color profile');
   return { blob: new Blob(parts, { type: MIME[format] }), format, lossless: true, kept, scaled: false };
@@ -94,13 +108,13 @@ function orientationApp1(o) {
 
 // ---- Redraw: decode, paint to a fresh canvas, encode a new file ----------
 
-async function redraw(file, format, opts) {
-  const img = await loadImage(file);
-  let w = img.naturalWidth, h = img.naturalHeight;
+async function redraw(file, bytes, format, opts) {
+  const img = await decodeImage(file, bytes, format);
+  const w = img.width, h = img.height;
   let target = opts.format === 'same' ? format : opts.format;
-  if (!MIME[target] || (target === 'avif' && !(await canEncodeAvif()))) target = 'jpeg';
+  if (target === 'gif' || !MIME[target]) target = GRAPHIC.has(format) ? 'png' : 'jpeg';
+  if (target === 'avif' && !(await canEncodeAvif())) target = 'jpeg';
 
-  let scaled = false;
   let outW = w, outH = h;
   if (opts.fingerprint) {
     const f = 0.985 + Math.random() * 0.01;
@@ -108,30 +122,25 @@ async function redraw(file, format, opts) {
     outH = Math.round(h * f);
   }
   // Try full size first; older iOS caps a canvas at 16.7 million pixels and returns no context.
-  let result = null;
-  for (const cap of [64e6, 16.7e6, 8e6]) {
-    let tw = outW, th = outH;
-    if (tw * th > cap) {
-      const k = Math.sqrt(cap / (tw * th));
-      tw = Math.floor(tw * k);
-      th = Math.floor(th * k);
+  let blob = null, scaled = false;
+  try {
+    for (const cap of [64e6, 16.7e6, 8e6]) {
+      let tw = outW, th = outH;
+      if (tw * th > cap) {
+        const k = Math.sqrt(cap / (tw * th));
+        tw = Math.floor(tw * k);
+        th = Math.floor(th * k);
+      }
+      blob = await paint(img, tw, th, target, opts);
+      if (blob) { scaled = tw !== outW; break; }
     }
-    result = await paint(img, tw, th, target, opts);
-    if (result) { scaled = tw !== outW; break; }
+  } finally {
+    img.done();
   }
-  URL.revokeObjectURL(img.src);
-  if (!result) throw new Error('This photo is too large for the browser to redraw.');
-  return { blob: result, format: target, lossless: false, kept: [], scaled };
-}
-
-function loadImage(file) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.decoding = 'async';
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('This browser cannot open this image type.'));
-    img.src = URL.createObjectURL(file);
-  });
+  if (!blob) throw new Error('This photo is too large for the browser to redraw.');
+  // Some browsers quietly fall back to PNG when they cannot encode a type (Safari and WebP).
+  const actual = FROM_MIME[blob.type] || 'png';
+  return { blob, format: actual, lossless: false, kept: [], scaled, fellBack: actual !== target ? target : null };
 }
 
 async function paint(img, w, h, target, opts) {
@@ -153,11 +162,11 @@ async function paint(img, w, h, target, opts) {
     ctx.translate(w / 2, h / 2);
     ctx.rotate(t);
     ctx.scale(s, s);
-    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    ctx.drawImage(img.source, -w / 2, -h / 2, w, h);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     addNoise(ctx, w, h);
   } else {
-    ctx.drawImage(img, 0, 0, w, h);
+    ctx.drawImage(img.source, 0, 0, w, h);
   }
   const q = target === 'png' ? undefined : opts.quality / 100;
   const blob = await new Promise((res) => c.toBlob(res, MIME[target], q));
