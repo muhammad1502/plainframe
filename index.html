@@ -124,7 +124,7 @@
         <span class="row-icon" aria-hidden="true"><svg><use href="#i-layers"/></svg></span>
         <label class="row-main" for="format"><span class="row-title">Format</span><span class="row-sub">For the new file</span></label>
         <select id="format" class="select">
-          <option value="same">Same as original</option>
+          <option value="same">Original</option>
           <option value="jpeg">JPEG</option>
           <option value="png">PNG</option>
           <option value="webp">WebP</option>
@@ -134,11 +134,13 @@
 
       <div class="row" data-for="redraw">
         <span class="row-icon" aria-hidden="true"><svg><use href="#i-palette"/></svg></span>
-        <label class="row-main" for="quality"><span class="row-title">Quality</span><span class="row-sub">JPEG, WebP and AVIF</span></label>
-        <output class="row-value" id="quality-out" for="quality">92</output>
+        <div class="row-main"><span class="row-title" id="quality-label">Quality</span><span class="row-sub" id="quality-help"></span></div>
       </div>
-      <div class="range-row" data-for="redraw">
-        <input id="quality" type="range" min="60" max="100" step="1" value="92">
+      <div class="segmented segmented-4" role="radiogroup" aria-labelledby="quality-label" data-for="redraw">
+        <label><input type="radio" name="quality" value="smart"><span>Smart</span></label>
+        <label><input type="radio" name="quality" value="90"><span>90%</span></label>
+        <label><input type="radio" name="quality" value="70"><span>70%</span></label>
+        <label><input type="radio" name="quality" value="50"><span>50%</span></label>
       </div>
 
       <div class="row" data-for="redraw">

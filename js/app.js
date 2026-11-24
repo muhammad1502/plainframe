@@ -1,5 +1,5 @@
 import { inspect, formatBytes } from './meta.js';
-import { cleanImage, canEncodeAvif, LOSSLESS } from './clean.js';
+import { cleanImage, canEncodeAvif, LOSSLESS, LOOKS_SAME } from './clean.js';
 import { makeZip } from './zip.js';
 
 const $ = (s) => document.querySelector(s);
@@ -15,8 +15,10 @@ const FLAG_NAMES = { gps: 'Location', ai: 'AI data', c2pa: 'Content Credentials'
 
 // ---- Settings -------------------------------------------------------------
 
-const defaults = { mode: 'lossless', format: 'same', quality: 92, fingerprint: false, keepIcc: true, rename: true };
+const QUALITIES = ['smart', '90', '70', '50'];
+const defaults = { mode: 'lossless', format: 'same', quality: 'smart', fingerprint: false, keepIcc: true, rename: true };
 const settings = { ...defaults, ...load('settings') };
+if (!QUALITIES.includes(String(settings.quality))) settings.quality = 'smart';
 
 function load(key) {
   try { return JSON.parse(localStorage.getItem(key)) || {}; } catch { return {}; }
@@ -30,6 +32,10 @@ function bindSettings() {
     r.checked = r.value === settings.mode;
     r.addEventListener('change', () => { settings.mode = r.value; settingsChanged(); });
   }
+  for (const r of document.querySelectorAll('input[name=quality]')) {
+    r.checked = r.value === String(settings.quality);
+    r.addEventListener('change', () => { settings.quality = r.value; settingsChanged(); });
+  }
   const bind = (id, key, read) => {
     const el = $(id);
     if (el.type === 'checkbox') el.checked = settings[key];
@@ -37,7 +43,6 @@ function bindSettings() {
     el.addEventListener(el.type === 'range' ? 'input' : 'change', () => { settings[key] = read(el); settingsChanged(); });
   };
   bind('#format', 'format', (el) => el.value);
-  bind('#quality', 'quality', (el) => +el.value);
   bind('#fingerprint', 'fingerprint', (el) => el.checked);
   bind('#keep-icc', 'keepIcc', (el) => el.checked);
   bind('#rename', 'rename', (el) => el.checked);
@@ -50,7 +55,9 @@ function bindSettings() {
 
 function renderSettings() {
   for (const el of document.querySelectorAll('[data-for]')) el.hidden = el.dataset.for !== settings.mode;
-  $('#quality-out').textContent = settings.quality;
+  $('#quality-help').textContent = settings.quality === 'smart'
+    ? 'Finds the smallest file that still looks the same as the original. PNG stays lossless.'
+    : `Saves at ${settings.quality}% for a smaller file. Each photo is checked afterwards. PNG stays lossless.`;
   $('#mode-help').textContent = settings.mode === 'lossless'
     ? 'Removes metadata and keeps every pixel and animation. HEIC, AVIF, TIFF and BMP are redrawn.'
     : 'Paints a brand-new image, so nothing old can come along. Animations keep only the first frame.';
@@ -388,13 +395,19 @@ function verdict(it) {
   icon.innerHTML = `<svg aria-hidden="true"><use href="#i-${v.count ? 'dots' : 'check'}"/></svg>`;
   const text = el('div');
   const size = `${formatBytes(it.file.size)} to ${formatBytes(it.out.blob.size)}`;
-  const how = it.out.lossless ? 'Pixels untouched' : `Redrawn as ${FORMAT_NAMES[it.out.format]}`;
+  let how = it.out.lossless ? 'Pixels untouched' : `Redrawn as ${FORMAT_NAMES[it.out.format]}`;
+  if (it.out.quality) {
+    const m = it.out.match;
+    const look = m >= LOOKS_SAME ? 'looks the same as the original' : m >= 37 ? 'small differences up close' : 'some loss is visible';
+    how += ` at ${it.out.quality}% quality, ${look} (${m >= 99 ? 'exact' : `${m.toFixed(1)} dB`})`;
+  }
   if (v.count) {
     text.append(el('strong', '', 'Checked, some data left'), el('p', '', `${v.groups.filter((g) => g.key !== 'icc').map((g) => g.title).join(', ')}. Try Redraw for a fully fresh file.`));
   } else {
     text.append(el('strong', '', 'Checked: no metadata left'), el('p', '', `${how}. ${size}.`));
   }
   const kept = [...it.out.kept];
+  if (!it.out.lossless && it.out.blob.size > it.file.size * 1.05) text.append(el('p', '', 'This file came out larger than the original. For graphics and screenshots, Keep quality or PNG usually stays smaller.'));
   if (it.out.scaled) kept.push('Resized to fit the browser’s canvas limit');
   if (it.out.fellBack) kept.push(`Saved as ${FORMAT_NAMES[it.out.format]} because this browser cannot write ${FORMAT_NAMES[it.out.fellBack]}`);
   if (kept.length) text.append(el('p', '', `Kept: ${kept.join('; ')}.`));

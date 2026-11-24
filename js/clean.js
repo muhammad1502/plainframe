@@ -122,7 +122,7 @@ async function redraw(file, bytes, format, opts) {
     outH = Math.round(h * f);
   }
   // Try full size first; older iOS caps a canvas at 16.7 million pixels and returns no context.
-  let blob = null, scaled = false;
+  let blob = null, scaled = false, quality = null, match = null;
   try {
     for (const cap of [64e6, 16.7e6, 8e6]) {
       let tw = outW, th = outH;
@@ -131,8 +131,8 @@ async function redraw(file, bytes, format, opts) {
         tw = Math.floor(tw * k);
         th = Math.floor(th * k);
       }
-      blob = await paint(img, tw, th, target, opts);
-      if (blob) { scaled = tw !== outW; break; }
+      const r = await paint(img, tw, th, target, opts);
+      if (r) { ({ blob, quality, match } = r); scaled = tw !== outW; break; }
     }
   } finally {
     img.done();
@@ -140,14 +140,14 @@ async function redraw(file, bytes, format, opts) {
   if (!blob) throw new Error('This photo is too large for the browser to redraw.');
   // Some browsers quietly fall back to PNG when they cannot encode a type (Safari and WebP).
   const actual = FROM_MIME[blob.type] || 'png';
-  return { blob, format: actual, lossless: false, kept: [], scaled, fellBack: actual !== target ? target : null };
+  return { blob, format: actual, lossless: false, kept: [], scaled, quality: actual === 'png' ? null : quality, match: actual === 'png' ? null : match, fellBack: actual !== target ? target : null };
 }
 
 async function paint(img, w, h, target, opts) {
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
-  const ctx = c.getContext('2d', { willReadFrequently: opts.fingerprint });
+  const ctx = c.getContext('2d', { willReadFrequently: true });
   if (!ctx) return null;
   if (target === 'jpeg') {
     ctx.fillStyle = '#fff';
@@ -168,10 +168,70 @@ async function paint(img, w, h, target, opts) {
   } else {
     ctx.drawImage(img.source, 0, 0, w, h);
   }
-  const q = target === 'png' ? undefined : opts.quality / 100;
-  const blob = await new Promise((res) => c.toBlob(res, MIME[target], q));
-  c.width = c.height = 0; // frees the backing store right away on iOS
-  return blob && blob.size > 0 ? blob : null;
+  let result;
+  try {
+    result = target === 'png' ? { blob: await encode(c, 'png'), quality: null, match: null } : await compress(c, ctx, target, opts.quality);
+  } finally {
+    c.width = c.height = 0; // frees the backing store right away on iOS
+  }
+  return result.blob && result.blob.size > 0 ? result : null;
+}
+
+const encode = (c, type, q) => new Promise((res) => c.toBlob(res, MIME[type], q));
+
+// Measured on brightness, which the eye is most sensitive to: JPEG and WebP store colour at lower
+// resolution by design, so an RGB score would call almost every photo "visibly worse".
+// 42 dB is a strict line for "looks the same"; it is an estimate from the full-resolution centre
+// of the photo, not a guarantee.
+export const LOOKS_SAME = 42;
+
+async function compress(c, ctx, target, setting) {
+  const r = region(c.width, c.height);
+  const ref = ctx.getImageData(r[0], r[1], r[2], r[3]).data;
+  const tried = new Map();
+  const at = async (q) => {
+    if (!tried.has(q)) {
+      const blob = await encode(c, target, q / 100);
+      tried.set(q, { blob, quality: q, match: blob ? await psnr(ref, blob, r) : 0 });
+    }
+    return tried.get(q);
+  };
+  if (setting !== 'smart') return at(Number(setting));
+  // Smallest quality from 50 to 95 that still measures as looking the same.
+  let lo = 50, hi = 95;
+  if ((await at(hi)).match < LOOKS_SAME) return at(hi);
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if ((await at(mid)).match >= LOOKS_SAME) hi = mid;
+    else lo = mid + 1;
+  }
+  return at(hi);
+}
+
+function region(w, h) {
+  const cw = Math.min(w, 2048), ch = Math.min(h, 2048);
+  return [Math.floor((w - cw) / 2), Math.floor((h - ch) / 2), cw, ch];
+}
+
+// Peak signal-to-noise ratio of brightness (Rec. 601 luma), in dB. Higher means closer to the original.
+async function psnr(ref, blob, r) {
+  const bmp = await createImageBitmap(blob);
+  const c = document.createElement('canvas');
+  c.width = r[2];
+  c.height = r[3];
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(bmp, r[0], r[1], r[2], r[3], 0, 0, r[2], r[3]);
+  bmp.close();
+  const d = ctx.getImageData(0, 0, r[2], r[3]).data;
+  c.width = c.height = 0;
+  let se = 0, n = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    const dy = 0.299 * (ref[i] - d[i]) + 0.587 * (ref[i + 1] - d[i + 1]) + 0.114 * (ref[i + 2] - d[i + 2]);
+    se += dy * dy;
+    n++;
+  }
+  const mse = se / n;
+  return mse === 0 ? 99 : 10 * Math.log10((255 * 255) / mse);
 }
 
 function addNoise(ctx, w, h) {

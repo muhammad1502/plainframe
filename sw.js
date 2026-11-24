@@ -1,5 +1,5 @@
 // Caches the app on install so it opens with no connection, and receives photos shared from other apps (Android).
-const VERSION = 'plainframe-v2';
+const VERSION = 'plainframe-v3';
 const SHELL = [
   './',
   'index.html',

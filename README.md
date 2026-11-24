@@ -4,7 +4,7 @@ Removes metadata from photos on your own device: location, camera and lens detai
 
 ## Install on Android
 
-1. On your phone, download [`release/Plainframe-1.1.apk`](release/Plainframe-1.1.apk) (open it on GitHub and tap the download button).
+1. On your phone, download [`release/Plainframe-1.2.apk`](release/Plainframe-1.2.apk) (open it on GitHub and tap the download button).
 2. Open the file. Android asks you to allow installs from your browser or file manager the first time; allow it, then tap Install.
 3. Open Plainframe from your app drawer. You can also share photos to it from Gallery or Google Photos with Share, then Plainframe.
 
@@ -28,6 +28,13 @@ Host the repository root on any static host (GitHub Pages: Settings, Pages, depl
 | BMP, ICO | Redrawn | Yes |
 
 Every cleaned file is read again before you save it, and the details sheet says what, if anything, is left.
+
+## Quality presets (Redraw)
+
+- **Smart** tries qualities from 50% to 95% and keeps the smallest file whose brightness detail still measures at 42 dB or more against the original, a strict line for "looks the same".
+- **90%, 70%, 50%** save at that quality for a smaller file.
+
+Every redrawn photo is measured against the original, and the details sheet tells you the result: looks the same, small differences up close, or some loss is visible. PNG output is always lossless.
 
 ## What it can't do
 
