@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; manifest-src 'self'; worker-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Plainframe</title>
+<meta name="description" content="Remove location, camera details, AI prompts and Content Credentials from photos. Runs on your device and works offline.">
+<meta name="theme-color" content="#190207">
+<meta name="color-scheme" content="light dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Plainframe">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="app.css">
+<script src="theme-init.js"></script>
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+<svg width="0" height="0" class="sprite" aria-hidden="true">
+  <defs>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></symbol>
+    <symbol id="i-eraser" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L11 21"/><path d="M22 21H7M5 11l9 9"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M12 15V3M7 10l5 5 5-5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></symbol>
+    <symbol id="i-zip" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M10 9h1M10 12h1M10 15h1"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3"/></symbol>
+    <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></symbol>
+    <symbol id="i-badge" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+    <symbol id="i-text" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 12 10 5 10-5M2 17l10 5 10-5"/></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 22a10 10 0 1 1 10-10c0 2.8-2.2 4-4 4h-2a2 2 0 0 0-1.5 3.3A2 2 0 0 1 12 22z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7" r="1"/><circle cx="16.5" cy="10.5" r="1"/></symbol>
+    <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="i-wifi-off" viewBox="0 0 24 24"><path d="M12 20h.01M8.5 16.4a5 5 0 0 1 7 0M2 8.8a15 15 0 0 1 4.2-2.7M22 8.8a15 15 0 0 0-11.3-3.8M5 12.9a10 10 0 0 1 5.2-2.8M19 12.9a10 10 0 0 0-2-1.5M2 2l20 20"/></symbol>
+    <symbol id="i-install" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="3"/><path d="M12 7v7M9 11l3 3 3-3M10 18h4"/></symbol>
+  </defs>
+</svg>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="globalnav">
+  <nav class="globalnav-inner" aria-label="Global">
+    <a class="brand" href="./" aria-label="Plainframe, home">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9"/><circle cx="16" cy="16" r="7.5"/></svg>
+      <span>Plainframe</span>
+    </a>
+    <div class="nav-actions">
+      <button class="icon-button" id="install" type="button" hidden aria-label="Install app">
+        <svg aria-hidden="true"><use href="#i-install"/></svg>
+      </button>
+      <button class="icon-button" id="theme" type="button" aria-label="Switch to light mode">
+        <svg class="when-dark" aria-hidden="true"><use href="#i-sun"/></svg>
+        <svg class="when-light" aria-hidden="true"><use href="#i-moon"/></svg>
+      </button>
+    </div>
+  </nav>
+</header>
+
+<main id="main" tabindex="-1">
+  <section class="hero viewport-content" aria-labelledby="title">
+    <p class="eyebrow">Hi there</p>
+    <h1 id="title">Clean your photos</h1>
+    <p class="lede">Location, camera details, AI prompts and Content Credentials come off before you share. Nothing leaves your device.</p>
+  </section>
+
+  <section class="viewport-content" aria-labelledby="add-title">
+    <div class="drop-card" id="drop">
+      <svg class="drop-art" viewBox="0 0 220 160" aria-hidden="true">
+        <circle class="art-ring" cx="150" cy="70" r="38"/>
+        <path class="art-tri" d="M58 112 92 52l26 66z"/>
+        <rect class="art-sq" x="168" y="112" width="26" height="26" rx="7" transform="rotate(14 181 125)"/>
+      </svg>
+      <div class="drop-copy">
+        <h2 id="add-title">Add photos</h2>
+        <p>JPG, PNG, WebP, AVIF and HEIC. As many as you like.</p>
+      </div>
+      <label class="button button-inverse" for="picker">
+        <svg aria-hidden="true"><use href="#i-plus"/></svg>
+        <span>Choose photos</span>
+      </label>
+      <input id="picker" class="visually-hidden" type="file" multiple accept="image/*,.heic,.heif,.avif,.webp">
+      <p class="drop-hint" aria-hidden="true">or drop them here</p>
+    </div>
+  </section>
+
+  <section class="viewport-content section" id="photos" aria-labelledby="photos-title" hidden>
+    <div class="section-head">
+      <h2 id="photos-title">Your photos</h2>
+      <button class="text-button" id="clear" type="button">Clear all</button>
+    </div>
+    <p class="section-intro" id="summary"></p>
+    <ul class="card list-card photo-list" id="list"></ul>
+  </section>
+
+  <section class="viewport-content section" aria-labelledby="settings-title">
+    <h2 id="settings-title">Settings</h2>
+    <div class="card list-card settings">
+      <div class="row">
+        <span class="row-icon" aria-hidden="true"><svg><use href="#i-image"/></svg></span>
+        <div class="row-main">
+          <span class="row-title" id="mode-label">Method</span>
+          <span class="row-sub" id="mode-help"></span>
+        </div>
+      </div>
+      <div class="segmented" role="radiogroup" aria-labelledby="mode-label">
+        <label><input type="radio" name="mode" value="lossless"><span>Keep quality</span></label>
+        <label><input type="radio" name="mode" value="redraw"><span>Redraw</span></label>
+      </div>
+
+      <div class="row" data-for="redraw">
+        <span class="row-icon" aria-hidden="true"><svg><use href="#i-layers"/></svg></span>
+        <label class="row-main" for="format"><span class="row-title">Format</span><span class="row-sub">For the new file</span></label>
+        <select id="format" class="select">
+          <option value="same">Same as original</option>
+          <option value="jpeg">JPEG</option>
+          <option value="png">PNG</option>
+          <option value="webp">WebP</option>
+          <option value="avif" id="avif-option" hidden>AVIF</option>
+        </select>
+      </div>
+
+      <div class="row" data-for="redraw">
+        <span class="row-icon" aria-hidden="true"><svg><use href="#i-palette"/></svg></span>
+        <label class="row-main" for="quality"><span class="row-title">Quality</span><span class="row-sub">JPEG, WebP and AVIF</span></label>
+        <output class="row-value" id="quality-out" for="quality">92</output>
+      </div>
+      <div class="range-row" data-for="redraw">
+        <input id="quality" type="range" min="60" max="100" step="1" value="92">
+      </div>
+
+      <div class="row" data-for="redraw">
+        <span class="row-icon" aria-hidden="true"><svg><use href="#i-dots"/></svg></span>
+        <label class="row-main" for="fingerprint"><span class="row-title">Change fingerprint</span><span class="row-sub">Tiny turn, resize and grain so copies are harder to match</span></label>
+        <input class="switch" id="fingerprint" type="checkbox" role="switch">
+      </div>
+
+      <div class="row" data-for="lossless">
+        <span class="row-icon" aria-hidden="true"><svg><use href="#i-palette"/></svg></span>
+        <label class="row-main" for="keep-icc"><span class="row-title">Keep color profile</span><span class="row-sub">Stops colors shifting on wide-gamut photos</span></label>
+        <input class="switch" id="keep-icc" type="checkbox" role="switch">
+      </div>
+
+      <div class="row">
+        <span class="row-icon" aria-hidden="true"><svg><use href="#i-text"/></svg></span>
+        <label class="row-main" for="rename"><span class="row-title">Random file names</span><span class="row-sub">Names like IMG_2041 or ComfyUI_00012 can give things away</span></label>
+        <input class="switch" id="rename" type="checkbox" role="switch">
+      </div>
+    </div>
+  </section>
+
+  <section class="viewport-content section" aria-labelledby="removes-title">
+    <h2 id="removes-title">What it removes</h2>
+    <ul class="card list-card info-list">
+      <li class="row"><span class="row-icon" aria-hidden="true"><svg><use href="#i-pin"/></svg></span><div class="row-main"><span class="row-title">Location</span><span class="row-sub">GPS coordinates, altitude, direction, city and country</span></div></li>
+      <li class="row"><span class="row-icon" aria-hidden="true"><svg><use href="#i-camera"/></svg></span><div class="row-main"><span class="row-title">Camera and device</span><span class="row-sub">Make, model, lens, serial numbers, software and dates</span></div></li>
+      <li class="row"><span class="row-icon" aria-hidden="true"><svg><use href="#i-cpu"/></svg></span><div class="row-main"><span class="row-title">AI generation data</span><span class="row-sub">Prompts, seeds and settings from Stable Diffusion, ComfyUI, NovelAI and others</span></div></li>
+      <li class="row"><span class="row-icon" aria-hidden="true"><svg><use href="#i-badge"/></svg></span><div class="row-main"><span class="row-title">Content Credentials</span><span class="row-sub">C2PA manifests from Firefly, ChatGPT, Photoshop and cameras</span></div></li>
+      <li class="row"><span class="row-icon" aria-hidden="true"><svg><use href="#i-user"/></svg></span><div class="row-main"><span class="row-title">Author and edit history</span><span class="row-sub">XMP and IPTC fields, keywords, captions and document IDs</span></div></li>
+      <li class="row"><span class="row-icon" aria-hidden="true"><svg><use href="#i-layers"/></svg></span><div class="row-main"><span class="row-title">Hidden images</span><span class="row-sub">Thumbnails, motion photo clips and data tucked after the image</span></div></li>
+    </ul>
+    <div class="card note-card">
+      <h3>What it can't remove</h3>
+      <p>Watermarks hidden in the pixels themselves, such as Google SynthID, survive any metadata cleaner. So does anything visible in the picture. AI detectors that judge the pixels may still flag an image.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="footer viewport-content">
+  <p><svg aria-hidden="true"><use href="#i-wifi-off"/></svg><span id="offline-status">Runs on this device. It makes no network requests.</span></p>
+  <p class="install-tip" id="ios-tip" hidden>To install on iPhone: tap Share, then Add to Home Screen.</p>
+</footer>
+
+<div class="action-bar" id="actions" hidden>
+  <div class="action-inner">
+    <button class="button" id="run" type="button">
+      <svg aria-hidden="true"><use href="#i-eraser"/></svg>
+      <span id="run-label">Clean photos</span>
+    </button>
+    <button class="button button-secondary" id="zip" type="button" hidden>
+      <svg aria-hidden="true"><use href="#i-zip"/></svg>
+      <span>Download ZIP</span>
+    </button>
+  </div>
+</div>
+
+<dialog class="sheet" id="sheet" aria-labelledby="sheet-title">
+  <div class="sheet-grab" aria-hidden="true"></div>
+  <button class="sheet-close icon-button" type="button" id="sheet-close" aria-label="Close">
+    <svg aria-hidden="true"><use href="#i-x"/></svg>
+  </button>
+  <div class="sheet-body" id="sheet-body"></div>
+</dialog>
+
+<div class="drop-veil" id="veil" aria-hidden="true"><p>Drop to add</p></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
