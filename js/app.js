@@ -3,6 +3,8 @@ import { cleanImage, canEncodeAvif, LOSSLESS } from './clean.js';
 import { makeZip } from './zip.js';
 
 const $ = (s) => document.querySelector(s);
+// Present only inside the Android app.
+const native = window.PlainframeAndroid || null;
 const items = [];
 let nextId = 1;
 let busy = false;
@@ -228,7 +230,22 @@ const canShareFiles = (files) => {
 // Phones save to the photo library through the share sheet; desktops download.
 const preferShare = () => matchMedia('(pointer: coarse)').matches;
 
+function toBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).slice(String(r.result).indexOf(',') + 1));
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(blob);
+  });
+}
+
 async function saveFiles(list) {
+  if (native) {
+    let ok = 0;
+    for (const it of list) if (native.saveToGallery(it.out.name, it.out.blob.type, await toBase64(it.out.blob))) ok++;
+    toast(ok === list.length ? `Saved to Pictures/Plainframe` : `Saved ${ok} of ${list.length}`);
+    return;
+  }
   const files = list.map((i) => i.out.file);
   if (preferShare() && canShareFiles(files)) {
     try {
@@ -244,12 +261,29 @@ async function saveFiles(list) {
   }
 }
 
+const canShare = () => !!native || (preferShare() && canShareFiles([new File([''], 'x.jpg', { type: 'image/jpeg' })]));
+
+async function shareFiles(list) {
+  if (native) {
+    const files = [];
+    for (const it of list) files.push({ name: it.out.name, mime: it.out.blob.type, data: await toBase64(it.out.blob) });
+    if (!native.share(JSON.stringify(files))) toast('Could not open sharing');
+    return;
+  }
+  try { await navigator.share({ files: list.map((i) => i.out.file) }); } catch {}
+}
+
 async function saveZip() {
   const done = items.filter((i) => i.out);
   if (!done.length) return;
   toast('Making ZIP');
   const blob = await makeZip(done.map((i) => ({ name: i.out.name, blob: i.out.blob })));
-  download(blob, `plainframe-${done.length}-photos.zip`);
+  const name = `plainframe-${done.length}-photos.zip`;
+  if (native) {
+    toast(native.saveToDownloads(name, 'application/zip', await toBase64(blob)) ? 'ZIP saved to Downloads' : 'Could not save the ZIP');
+    return;
+  }
+  download(blob, name);
 }
 
 function download(blob, name) {
@@ -335,6 +369,11 @@ function renderSheet() {
     const save = button('Save', 'save', '');
     save.addEventListener('click', () => saveFiles([it]));
     actions.append(save);
+    if (canShare()) {
+      const share = button('Share', 'share', 'button-secondary');
+      share.addEventListener('click', () => shareFiles([it]));
+      actions.append(share);
+    }
   }
   const remove = button('Remove', 'trash', 'button-secondary');
   remove.addEventListener('click', () => { removeItem(it); closeSheet(); });
@@ -457,6 +496,7 @@ function setupTheme() {
     const dark = document.documentElement.dataset.theme === 'dark';
     btn.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
     document.querySelector('meta[name=theme-color]').content = dark ? '#190207' : '#fff6f8';
+    if (native) native.setDark(dark);
   };
   const apply = (mode) => {
     const go = () => { document.documentElement.dataset.theme = mode; sync(); };
@@ -479,6 +519,16 @@ function setupTheme() {
 // ---- Offline, install and share target ------------------------------------
 
 function setupApp() {
+  if (native) {
+    $('#offline-status').textContent = 'Runs on this phone with no internet permission. Photos are never uploaded.';
+    window.plainframeBack = () => {
+      if ($('#sheet').open) { closeSheet(); return true; }
+      return false;
+    };
+    window.plainframeReceiveShared = receiveNativeShared;
+    receiveNativeShared();
+    return;
+  }
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').then(() => navigator.serviceWorker.ready).then(() => {
       $('#offline-status').textContent = 'Runs on this device and works offline. Photos are never uploaded.';
@@ -502,7 +552,21 @@ function setupApp() {
   $('#ios-tip').hidden = !(ios && !standalone);
 }
 
+async function receiveNativeShared() {
+  try {
+    const list = JSON.parse(native.sharedFiles());
+    const files = [];
+    for (let i = 0; i < list.length; i++) {
+      const blob = await (await fetch(`/shared/${i}`)).blob();
+      files.push(new File([blob], list[i].name, { type: list[i].type || blob.type }));
+    }
+    native.clearShared();
+    if (files.length) addFiles(files);
+  } catch {}
+}
+
 async function receiveShared() {
+  if (native) return;
   const url = new URL(location.href);
   if (!url.searchParams.has('shared') || !('caches' in window)) return;
   history.replaceState(null, '', url.pathname);

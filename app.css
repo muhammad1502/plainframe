@@ -357,7 +357,7 @@ html:not(.is-ready) .switch, html:not(.is-ready) .switch::after, html:not(.is-re
 .verdict p { font-size: 14px; color: var(--text-2); }
 .verdict strong { display: block; font-size: 17px; color: var(--text); }
 .sheet-actions { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 12px; margin-top: 24px; }
-.sheet-actions .button { min-width: 0; }
+.sheet-actions .button { min-width: 0; padding: 0 12px; }
 .empty-note { margin-top: 24px; color: var(--text-2); }
 
 .drop-veil {

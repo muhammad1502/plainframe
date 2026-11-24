@@ -1,0 +1,67 @@
+plugins {
+    id 'com.android.application'
+}
+
+// The web app in the repository root is the whole interface; it is copied into the APK's assets.
+def webRoot = rootProject.file('..')
+def webOut = layout.buildDirectory.dir('generated/web')
+def syncWeb = tasks.register('syncWeb', Sync) {
+    from(webRoot) {
+        include 'index.html', 'app.css', 'theme-init.js', 'manifest.webmanifest'
+        include 'js/**', 'vendor/**', 'icons/**'
+    }
+    into webOut.map { it.dir('www') }
+}
+
+android {
+    namespace 'com.muhammad1502.plainframe'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.muhammad1502.plainframe'
+        minSdk 29
+        targetSdk 36
+        versionCode 1
+        versionName '1.0'
+    }
+
+    signingConfigs {
+        release {
+            // Read from keystore.properties so the key and its password never enter the repository.
+            def f = rootProject.file('keystore.properties')
+            if (f.exists()) {
+                def p = new Properties()
+                f.withInputStream { p.load(it) }
+                storeFile rootProject.file(p['storeFile'])
+                storePassword p['storePassword']
+                keyAlias p['keyAlias']
+                keyPassword p['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig rootProject.file('keystore.properties').exists() ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    sourceSets {
+        main.assets.srcDirs += webOut
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+tasks.named('preBuild') { dependsOn syncWeb }
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.14.0'
+    implementation 'androidx.core:core:1.16.0'
+}
